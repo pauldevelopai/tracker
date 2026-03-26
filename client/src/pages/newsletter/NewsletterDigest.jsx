@@ -121,6 +121,7 @@ export default function NewsletterDigest() {
       const result = await apiFetch('/newsletter/regenerate-digest', {
         method: 'POST',
         body: JSON.stringify({ date: selectedDate }),
+        timeout: 300000, // 5 min — AI generation can take a while
       });
       setDigest(result.digest);
       loadArchive(); // refresh archive list
