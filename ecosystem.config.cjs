@@ -1,0 +1,37 @@
+module.exports = {
+  apps: [
+    {
+      name: 'holly-server',
+      cwd: './server',
+      script: 'index.js',
+      interpreter: 'node',
+      env: {
+        NODE_ENV: 'development',
+        PORT: 3001,
+      },
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      error_file: '../logs/server-error.log',
+      out_file: '../logs/server-out.log',
+      merge_logs: true,
+    },
+    {
+      name: 'holly-client',
+      cwd: './client',
+      script: 'node_modules/.bin/vite',
+      args: '--host 0.0.0.0',
+      interpreter: 'node',
+      watch: false,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      error_file: '../logs/client-error.log',
+      out_file: '../logs/client-out.log',
+      merge_logs: true,
+    },
+  ],
+};
