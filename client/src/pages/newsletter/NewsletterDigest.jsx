@@ -198,14 +198,21 @@ export default function NewsletterDigest() {
                 </div>
               ) : (
                 <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
-                  dangerouslySetInnerHTML={{ __html: digest
-                    // First strip any raw HTML anchor tags Claude might output
-                    .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)')
-                    // Now convert clean markdown links to HTML
-                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>')
-                    // Convert any remaining bare URLs (not already in an anchor)
-                    .replace(/(?<!href="|">)(https?:\/\/[^\s<)"]+)/g, '<a href="$1" target="_blank" rel="noreferrer" style="color: #6366F1; font-size: 12px; word-break: break-all">Link</a>')
-                  }} />
+                  dangerouslySetInnerHTML={{ __html: (() => {
+                    let text = digest;
+                    // 1. Strip ALL HTML tags completely, preserving href URLs as markdown
+                    text = text.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
+                    text = text.replace(/<[^>]+>/g, ''); // nuke any remaining HTML
+                    // 2. Fix malformed patterns like: https://url" target... → just the URL
+                    text = text.replace(/(https?:\/\/[^\s"]+)"[^)]*\)/g, '$1');
+                    // 3. Convert markdown links [text](url) → clickable HTML
+                    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+                      '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>');
+                    // 4. Convert remaining bare URLs → clickable
+                    text = text.replace(/(?<!href=")(https?:\/\/[^\s<)"]+)/g,
+                      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline; word-break: break-all">$1</a>');
+                    return text;
+                  })() }} />
               )}
             </div>
           )}
