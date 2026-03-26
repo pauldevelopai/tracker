@@ -27,9 +27,9 @@ router.get('/', async (req, res) => {
 // Get digest for a specific date (from archive)
 router.get('/digest/:date', async (req, res) => {
   try {
-    // Get archived digest
+    // Get current digest for this date
     const { rows: digests } = await pool.query(
-      'SELECT * FROM newsletter_digests WHERE digest_date = $1',
+      'SELECT * FROM newsletter_digests WHERE digest_date = $1 AND is_current = true ORDER BY version DESC LIMIT 1',
       [req.params.date]
     );
 
@@ -127,16 +127,23 @@ router.post('/regenerate-digest', async (req, res) => {
 
     const digest = await generateDailyDigest(items);
 
-    // Save/update in the archive table
+    // Archive any existing current digest for this date
     await pool.query(
-      `INSERT INTO newsletter_digests (digest_date, content, item_count, curriculum_count)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (digest_date) DO UPDATE SET
-         content = EXCLUDED.content,
-         item_count = EXCLUDED.item_count,
-         curriculum_count = EXCLUDED.curriculum_count,
-         updated_at = NOW()`,
-      [targetDate, digest, items.length, items.filter(i => i.is_curriculum_relevant).length]
+      `UPDATE newsletter_digests SET is_current = false WHERE digest_date = $1 AND is_current = true`,
+      [targetDate]
+    );
+
+    // Get next version number
+    const { rows: [{ max_version }] } = await pool.query(
+      `SELECT COALESCE(MAX(version), 0) AS max_version FROM newsletter_digests WHERE digest_date = $1`,
+      [targetDate]
+    );
+
+    // Insert new version as current
+    await pool.query(
+      `INSERT INTO newsletter_digests (digest_date, content, item_count, curriculum_count, version, is_current)
+       VALUES ($1, $2, $3, $4, $5, true)`,
+      [targetDate, digest, items.length, items.filter(i => i.is_curriculum_relevant).length, (max_version || 0) + 1]
     );
 
     res.json({ digest, itemCount: items.length });
@@ -152,12 +159,18 @@ router.put('/digest/:date', async (req, res) => {
     const { content } = req.body;
     if (!content) return res.status(400).json({ message: 'content required' });
 
-    await pool.query(
-      `INSERT INTO newsletter_digests (digest_date, content, item_count, curriculum_count)
-       VALUES ($1, $2, 0, 0)
-       ON CONFLICT (digest_date) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()`,
-      [req.params.date, content]
+    // Update the current version for this date
+    const { rowCount } = await pool.query(
+      `UPDATE newsletter_digests SET content = $1, updated_at = NOW() WHERE digest_date = $2 AND is_current = true`,
+      [content, req.params.date]
     );
+    if (rowCount === 0) {
+      await pool.query(
+        `INSERT INTO newsletter_digests (digest_date, content, item_count, curriculum_count, version, is_current)
+         VALUES ($1, $2, 0, 0, 1, true)`,
+        [req.params.date, content]
+      );
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -169,11 +182,12 @@ router.put('/digest/:date', async (req, res) => {
 router.get('/archive', async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT nd.digest_date, nd.item_count, nd.curriculum_count, nd.created_at,
+      SELECT nd.id, nd.digest_date, nd.item_count, nd.curriculum_count, nd.created_at,
+        nd.version, nd.is_current,
         LEFT(nd.content, 200) AS preview
       FROM newsletter_digests nd
-      ORDER BY nd.digest_date DESC
-      LIMIT 60
+      ORDER BY nd.digest_date DESC, nd.version DESC
+      LIMIT 100
     `);
     res.json(rows);
   } catch (err) {
