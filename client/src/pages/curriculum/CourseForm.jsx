@@ -14,6 +14,7 @@ export default function CourseForm({ course, onClose, onSaved }) {
     sector_id: course?.sector_id || selectedSectorId || '',
     title: course?.title || '',
     description: course?.description || '',
+    notes: course?.notes || '',
     delivery_type: course?.delivery_type || 'both',
     version: course?.version || 'v1.0',
     status: course?.status || 'draft',
@@ -84,7 +85,11 @@ export default function CourseForm({ course, onClose, onSaved }) {
         </div>
         <div className="form-group">
           <label>Description</label>
-          <textarea value={form.description} onChange={set('description')} rows={4} />
+          <textarea value={form.description} onChange={set('description')} rows={3} />
+        </div>
+        <div className="form-group">
+          <label>Notes</label>
+          <textarea value={form.notes} onChange={set('notes')} rows={3} placeholder="Delivery tips, context, target audience details, trainer guidance..." />
         </div>
         <div className="form-actions">
           <button type="submit" className="btn btn-primary" disabled={saving}>

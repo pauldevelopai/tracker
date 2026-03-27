@@ -132,12 +132,12 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { sector_id, title, description, delivery_type, version, status } = req.body;
+    const { sector_id, title, description, notes, delivery_type, version, status } = req.body;
     if (!sector_id || !title) return res.status(400).json({ message: 'sector_id and title required' });
     const { rows } = await pool.query(
-      `INSERT INTO courses (sector_id, title, description, delivery_type, version, status, last_updated_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [sector_id, title, description || null, delivery_type || 'both', version || 'v1.0', status || 'draft', req.user.id]
+      `INSERT INTO courses (sector_id, title, description, notes, delivery_type, version, status, last_updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [sector_id, title, description || null, notes || null, delivery_type || 'both', version || 'v1.0', status || 'draft', req.user.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -148,15 +148,15 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { sector_id, title, description, delivery_type, version, status, effectiveness_score } = req.body;
+    const { sector_id, title, description, notes, delivery_type, version, status, effectiveness_score } = req.body;
     const { rows } = await pool.query(
       `UPDATE courses SET
         sector_id = COALESCE($1, sector_id), title = COALESCE($2, title),
-        description = $3, delivery_type = COALESCE($4, delivery_type),
-        version = COALESCE($5, version), status = COALESCE($6, status),
-        effectiveness_score = $7, last_updated_by = $8, updated_at = NOW()
-       WHERE id = $9 RETURNING *`,
-      [sector_id, title, description, delivery_type, version, status, effectiveness_score, req.user.id, req.params.id]
+        description = $3, notes = $4, delivery_type = COALESCE($5, delivery_type),
+        version = COALESCE($6, version), status = COALESCE($7, status),
+        effectiveness_score = $8, last_updated_by = $9, updated_at = NOW()
+       WHERE id = $10 RETURNING *`,
+      [sector_id, title, description, notes, delivery_type, version, status, effectiveness_score, req.user.id, req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Course not found' });
     res.json(rows[0]);
