@@ -294,7 +294,20 @@ Return {} if nothing should be updated.`,
       ['user_input', entityId, entityType, `[${entityType}: ${entity.name || entity.title || entity.first_name || entityId}] ${text}`]
     ).catch(() => {});
 
-    res.json({ ok: true, message: `Updated ${validKeys.length} field${validKeys.length !== 1 ? 's' : ''}. Info absorbed.`, fieldsUpdated: validKeys });
+    // Build a snapshot of what was actually written
+    const fieldSnapshot = validKeys.reduce((acc, k) => {
+      const val = updates[k];
+      acc[k] = typeof val === 'string' ? val.slice(0, 200) : val;
+      return acc;
+    }, {});
+
+    res.json({
+      ok: true,
+      fieldsUpdated: validKeys,
+      updates: fieldSnapshot,
+      entityName: entity.name || entity.title || `${entity.first_name || ''} ${entity.last_name || ''}`.trim() || null,
+      savedToKnowledge: true,
+    });
   } catch (err) {
     console.error('Smart input error:', err);
     res.status(500).json({ message: err.message || 'Failed to process input' });
