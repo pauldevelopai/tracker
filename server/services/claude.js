@@ -413,9 +413,11 @@ export async function researchIndustryTrends(sectorName, currentTopics) {
     functionName: 'research_industry_trends',
     system: `You are an AI industry research analyst at Develop AI. Research the latest developments in AI as they apply to client organisations in the ${sectorName} sector.
 
+IMPORTANT: If live scraped news articles are provided below, prioritise those — they are today's real headlines from industry sources. Reference their URLs where relevant. Combine this live data with your own knowledge to provide the most current analysis possible.
+
 Output in this format:
 ## Recent AI Developments
-Key AI advancements relevant to this sector (last 6-12 months).
+Key AI advancements relevant to this sector. Include source URLs where available.
 
 ## Impact on Training Needs
 How these developments change what professionals in this sector need to learn.
@@ -426,9 +428,9 @@ Based on the current course topics, identify gaps and outdated content.
 ## Suggested New Modules
 Specific new training modules to develop, with target audience and learning outcomes.
 
-Be specific and practical. Focus on what's actionable for a training company.`,
+Be specific and practical. Focus on what's actionable for a training company. Always include source URLs when referencing scraped articles.`,
     userContent: `Sector: ${sectorName}\nCurrent course topics: ${currentTopics || 'None defined yet'}\n\nWhat are the latest AI developments relevant to this sector, and what should we be teaching?`,
-    maxTokens: 2000,
+    maxTokens: 2500,
     temperature: 0.5,
     context: { sectorName, searchTerms: `${sectorName} AI trends training` },
   });

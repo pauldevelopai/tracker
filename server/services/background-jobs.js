@@ -172,13 +172,48 @@ export async function runIndustryResearcher() {
   let itemsProcessed = 0;
   let intelligenceCreated = 0;
 
+  // Import scraper
+  let scrapeSectorNews;
+  try {
+    const scraper = await import('./web-scraper.js');
+    scrapeSectorNews = scraper.scrapeSectorNews;
+  } catch (e) {
+    console.log('[IndustryResearcher] Web scraper not available, using Claude-only mode');
+  }
+
   const { rows: sectors } = await pool.query("SELECT id, name FROM sectors WHERE is_active = true");
 
   for (const sector of sectors) {
     try {
       const { rows: courses } = await pool.query('SELECT title FROM courses WHERE sector_id = $1', [sector.id]);
       const currentTopics = courses.map(c => c.title).join(', ');
-      const research = await researchIndustryTrends(sector.name, currentTopics);
+
+      // STEP 1: Scrape live news from sector sources
+      let liveContext = '';
+      if (scrapeSectorNews) {
+        try {
+          console.log(`[IndustryResearcher] Scraping live ${sector.name} sector news...`);
+          const articles = await scrapeSectorNews(sector.name);
+          const successCount = articles.filter(a => a.scraped).length;
+          console.log(`[IndustryResearcher] Scraped ${successCount}/${articles.length} articles for ${sector.name}`);
+
+          if (articles.length > 0) {
+            liveContext = '\n\nLIVE NEWS SCRAPED TODAY FROM INDUSTRY SOURCES:\n' +
+              articles.map((a, i) => {
+                let entry = `${i+1}. "${a.title}" (${a.source}${a.publishDate ? `, ${a.publishDate}` : ''})`;
+                if (a.url) entry += `\n   URL: ${a.url}`;
+                if (a.description) entry += `\n   ${a.description}`;
+                if (a.fullText) entry += `\n   Content: ${a.fullText.slice(0, 500)}`;
+                return entry;
+              }).join('\n\n');
+          }
+        } catch (scrapeErr) {
+          console.log(`[IndustryResearcher] Scraping failed for ${sector.name}: ${scrapeErr.message}`);
+        }
+      }
+
+      // STEP 2: Send scraped news + existing knowledge to Claude for analysis
+      const research = await researchIndustryTrends(sector.name, currentTopics + liveContext);
       results.push(`## ${sector.name} Sector\n\n${research}`);
       itemsProcessed++;
 
@@ -206,10 +241,15 @@ export async function runIndustryResearcher() {
 
           const relevanceScore = bullet.length > 100 ? 0.7 : 0.5;
 
+          // Try to extract a URL from the bullet text (Claude sometimes includes them from scraped context)
+          const urlMatch = itemSummary.match(/https?:\/\/[^\s)]+/);
+          const sourceUrl = urlMatch ? urlMatch[0] : null;
+          const sourceName = liveContext ? 'industry_researcher:live_scrape' : 'background_job:industry_researcher';
+
           await pool.query(
-            `INSERT INTO industry_intelligence (sector_id, category, title, summary, source, relevance_score, is_actionable)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [sector.id, category, itemTitle, itemSummary, 'background_job:industry_researcher', relevanceScore, relevanceScore >= 0.7]
+            `INSERT INTO industry_intelligence (sector_id, category, title, summary, source, source_url, relevance_score, is_actionable)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [sector.id, category, itemTitle, itemSummary, sourceName, sourceUrl, relevanceScore, relevanceScore >= 0.7]
           );
           intelligenceCreated++;
 
