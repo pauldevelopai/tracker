@@ -8,6 +8,7 @@ import OrganisationForm from './OrganisationForm.jsx';
 import Modal from '../../components/Modal.jsx';
 import DocumentUpload from '../../components/DocumentUpload.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const STAGE_LABELS = {
   prospect: 'Prospect', active: 'Active', partner: 'Partner', inactive: 'Inactive',
@@ -78,6 +79,11 @@ export default function OrganisationDetail() {
 
   useEffect(load, [id]);
 
+  async function saveField(field, value) {
+    await apiFetch(`/organisations/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    load();
+  }
+
   async function handleDelete() {
     await apiFetch(`/organisations/${id}`, { method: 'DELETE' });
     navigate('/organisations');
@@ -124,10 +130,13 @@ export default function OrganisationDetail() {
           )}
         </div>
         <div className="detail-grid">
-          <div className="detail-field">
-            <div className="detail-field-label">Type</div>
-            <div className="detail-field-value">{org.type || '—'}</div>
-          </div>
+          <InlineEditField
+            label="Type"
+            value={org.type}
+            onSave={v => saveField('type', v)}
+            type="text"
+            placeholder="e.g. NGO, University, Corporate..."
+          />
           <div className="detail-field">
             <div className="detail-field-label">Relationship</div>
             <div className="detail-field-value">
@@ -136,29 +145,56 @@ export default function OrganisationDetail() {
               </span>
             </div>
           </div>
-          {org.programme_name && (
-            <div className="detail-field">
-              <div className="detail-field-label">Programme</div>
-              <div className="detail-field-value">{org.programme_name}</div>
-            </div>
-          )}
-          <div className="detail-field">
-            <div className="detail-field-label">Location</div>
-            <div className="detail-field-value">{[org.city, org.country].filter(Boolean).join(', ') || '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Website</div>
-            <div className="detail-field-value">
-              {org.website ? <a href={org.website} target="_blank" rel="noreferrer">{org.website}</a> : '—'}
-            </div>
-          </div>
+          <InlineEditField
+            label="Relationship Stage"
+            value={org.relationship_stage}
+            onSave={v => saveField('relationship_stage', v)}
+            type="select"
+            options={[
+              { value: 'prospect', label: 'Prospect' },
+              { value: 'active', label: 'Active' },
+              { value: 'partner', label: 'Partner' },
+              { value: 'inactive', label: 'Inactive' },
+            ]}
+            displayValue={<span className={`stage-badge stage-${org.relationship_stage}`}>{STAGE_LABELS[org.relationship_stage] || org.relationship_stage}</span>}
+          />
+          <InlineEditField
+            label="Programme"
+            value={org.programme_name}
+            onSave={v => saveField('programme_name', v)}
+            type="text"
+            placeholder="Programme name..."
+          />
+          <InlineEditField
+            label="City"
+            value={org.city}
+            onSave={v => saveField('city', v)}
+            type="text"
+            placeholder="City..."
+          />
+          <InlineEditField
+            label="Country"
+            value={org.country}
+            onSave={v => saveField('country', v)}
+            type="text"
+            placeholder="Country..."
+          />
+          <InlineEditField
+            label="Website"
+            value={org.website}
+            onSave={v => saveField('website', v)}
+            type="url"
+            placeholder="https://..."
+            displayValue={org.website ? <a href={org.website} target="_blank" rel="noreferrer">{org.website}</a> : null}
+          />
         </div>
-        {org.notes && (
-          <div style={{ marginTop: '16px' }}>
-            <div className="detail-field-label">Notes</div>
-            <div className="detail-field-value" style={{ whiteSpace: 'pre-wrap' }}>{org.notes}</div>
-          </div>
-        )}
+        <InlineEditField
+          label="Notes"
+          value={org.notes}
+          onSave={v => saveField('notes', v)}
+          type="textarea"
+          placeholder="Add notes about this organisation..."
+        />
       </div>
 
       {/* Programme Organisations (for funders) */}

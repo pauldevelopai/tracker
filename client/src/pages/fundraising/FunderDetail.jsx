@@ -4,6 +4,7 @@ import { apiFetch } from '../../hooks/useApi.js';
 import DataTable from '../../components/DataTable.jsx';
 import FunderForm from './FunderForm.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const TYPE_LABELS = { foundation: 'Foundation', government: 'Government', arts_council: 'Arts Council', innovation_fund: 'Innovation Fund', international_development: 'International Dev' };
 
@@ -19,6 +20,11 @@ export default function FunderDetail() {
     apiFetch('/funding-opportunities').then(all => setOpportunities(all.filter(o => o.funder_id === id))).catch(() => setOpportunities([]));
   }
   useEffect(load, [id]);
+
+  async function saveField(field, value) {
+    await apiFetch(`/funders/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    load();
+  }
 
   if (!funder) return null;
 
@@ -41,11 +47,57 @@ export default function FunderDetail() {
           <button className="btn btn-secondary btn-small" onClick={() => setEditing(true)}>Edit</button>
         </div>
         <div className="detail-grid">
-          <div className="detail-field"><div className="detail-field-label">Country</div><div className="detail-field-value">{funder.country || '—'}</div></div>
-          <div className="detail-field"><div className="detail-field-label">Website</div><div className="detail-field-value">{funder.website ? <a href={funder.website} target="_blank" rel="noopener">{funder.website}</a> : '—'}</div></div>
-          <div className="detail-field"><div className="detail-field-label">Contact</div><div className="detail-field-value">{funder.contact_name || '—'}{funder.contact_email ? ` (${funder.contact_email})` : ''}</div></div>
+          <InlineEditField
+            label="Type"
+            value={funder.type}
+            onSave={v => saveField('type', v)}
+            type="select"
+            options={[
+              { value: 'foundation', label: 'Foundation' },
+              { value: 'government', label: 'Government' },
+              { value: 'arts_council', label: 'Arts Council' },
+              { value: 'innovation_fund', label: 'Innovation Fund' },
+              { value: 'international_development', label: 'International Development' },
+            ]}
+            displayValue={<span className={`stage-badge funder-${funder.type}`}>{TYPE_LABELS[funder.type] || funder.type}</span>}
+          />
+          <InlineEditField
+            label="Country"
+            value={funder.country}
+            onSave={v => saveField('country', v)}
+            type="text"
+            placeholder="Country..."
+          />
+          <InlineEditField
+            label="Website"
+            value={funder.website}
+            onSave={v => saveField('website', v)}
+            type="url"
+            placeholder="https://..."
+            displayValue={funder.website ? <a href={funder.website} target="_blank" rel="noopener">{funder.website}</a> : null}
+          />
+          <InlineEditField
+            label="Contact Name"
+            value={funder.contact_name}
+            onSave={v => saveField('contact_name', v)}
+            type="text"
+            placeholder="Contact person..."
+          />
+          <InlineEditField
+            label="Contact Email"
+            value={funder.contact_email}
+            onSave={v => saveField('contact_email', v)}
+            type="email"
+            placeholder="contact@funder.org"
+          />
         </div>
-        {funder.notes && <div style={{ marginTop: 12, fontSize: 14, color: 'var(--text-secondary)' }}>{funder.notes}</div>}
+        <InlineEditField
+          label="Notes"
+          value={funder.notes}
+          onSave={v => saveField('notes', v)}
+          type="textarea"
+          placeholder="Add notes about this funder..."
+        />
       </div>
 
       <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Opportunities</h3>

@@ -9,6 +9,7 @@ import CohortForm from './CohortForm.jsx';
 import ParticipantForm from './ParticipantForm.jsx';
 import SessionForm from './SessionForm.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const STATUS_LABELS = { planned: 'Planned', active: 'Active', completed: 'Completed', cancelled: 'Cancelled' };
 const DELIVERY_LABELS = { online_3x2hr: 'Online 3x2hr', in_person_2day: 'In-Person 2 day' };
@@ -69,6 +70,11 @@ export default function CohortDetail() {
       apiFetch(`/courses?sector_id=${cohort.sector_id}`).then(data => setAllCourses(Array.isArray(data) ? data : data.courses || [])).catch(() => setAllCourses([]));
     }
   }, [cohort?.sector_id]);
+
+  async function saveField(field, value) {
+    await apiFetch(`/cohorts/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    loadCohort();
+  }
 
   async function handleDelete() {
     await apiFetch(`/cohorts/${id}`, { method: 'DELETE' });
@@ -160,25 +166,56 @@ export default function CohortDetail() {
             <div className="detail-field-label">Lead Trainer</div>
             <div className="detail-field-value">{cohort.trainer_name || '—'}</div>
           </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Dates</div>
-            <div className="detail-field-value">
-              {cohort.start_date ? new Date(cohort.start_date).toLocaleDateString() : '—'}
-              {cohort.end_date ? ` — ${new Date(cohort.end_date).toLocaleDateString()}` : ''}
-            </div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Max Participants</div>
-            <div className="detail-field-value">{cohort.max_participants || '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">CPD Hours</div>
-            <div className="detail-field-value">{cohort.cpd_hours || '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Participants</div>
-            <div className="detail-field-value">{participants.length}{cohort.max_participants ? ` / ${cohort.max_participants}` : ''}</div>
-          </div>
+          <InlineEditField
+            label="Start Date"
+            value={cohort.start_date ? cohort.start_date.slice(0, 10) : ''}
+            onSave={v => saveField('start_date', v)}
+            type="date"
+            displayValue={cohort.start_date ? new Date(cohort.start_date).toLocaleDateString() : null}
+          />
+          <InlineEditField
+            label="End Date"
+            value={cohort.end_date ? cohort.end_date.slice(0, 10) : ''}
+            onSave={v => saveField('end_date', v)}
+            type="date"
+            displayValue={cohort.end_date ? new Date(cohort.end_date).toLocaleDateString() : null}
+          />
+          <InlineEditField
+            label="Max Participants"
+            value={cohort.max_participants}
+            onSave={v => saveField('max_participants', v)}
+            type="number"
+            placeholder="e.g. 20"
+          />
+          <InlineEditField
+            label="CPD Hours"
+            value={cohort.cpd_hours}
+            onSave={v => saveField('cpd_hours', v)}
+            type="number"
+            placeholder="e.g. 6"
+          />
+          <InlineEditField
+            label="Status"
+            value={cohort.status}
+            onSave={v => saveField('status', v)}
+            type="select"
+            options={Object.entries(STATUS_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            displayValue={<span className={`stage-badge status-${cohort.status}`}>{STATUS_LABELS[cohort.status] || cohort.status}</span>}
+          />
+          <InlineEditField
+            label="Delivery Type"
+            value={cohort.delivery_type}
+            onSave={v => saveField('delivery_type', v)}
+            type="select"
+            options={Object.entries(DELIVERY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            displayValue={<span className="stage-badge stage-active">{DELIVERY_LABELS[cohort.delivery_type] || cohort.delivery_type}</span>}
+          />
+          <InlineEditField
+            label="Participants"
+            value={`${participants.length}${cohort.max_participants ? ` / ${cohort.max_participants}` : ''}`}
+            onSave={() => {}}
+            readOnly={true}
+          />
         </div>
       </div>
 
@@ -346,11 +383,13 @@ export default function CohortDetail() {
       {/* Notes tab */}
       {activeTab === 'notes' && (
         <div className="card">
-          {cohort.notes ? (
-            <div style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{cohort.notes}</div>
-          ) : (
-            <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No notes. Click Edit to add notes to this cohort.</div>
-          )}
+          <InlineEditField
+            label="Notes"
+            value={cohort.notes}
+            onSave={v => saveField('notes', v)}
+            type="textarea"
+            placeholder="Add notes about this cohort..."
+          />
         </div>
       )}
 

@@ -9,6 +9,7 @@ import DocumentUpload from '../../components/DocumentUpload.jsx';
 import ModuleForm from './ModuleForm.jsx';
 import AIResearchPanel from './AIResearchPanel.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const STATUS_LABELS = { draft: 'Draft', active: 'Active', archived: 'Archived' };
 
@@ -26,12 +27,8 @@ export default function CourseDetail() {
   const [aiSuggestions, setAiSuggestions] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
-  const [editingNotes, setEditingNotes] = useState(false);
-  const [notesValue, setNotesValue] = useState('');
-  const [savingNotes, setSavingNotes] = useState(false);
-
   function loadCourse() {
-    apiFetch(`/courses/${id}`).then(c => { setCourse(c); setNotesValue(c.notes || ''); }).catch(() => navigate('/curriculum'));
+    apiFetch(`/courses/${id}`).then(setCourse).catch(() => navigate('/curriculum'));
   }
   function loadModules() {
     apiFetch(`/courses/${id}/modules`).then(setModules).catch(() => setModules([]));
@@ -39,17 +36,9 @@ export default function CourseDetail() {
 
   useEffect(() => { loadCourse(); loadModules(); }, [id]);
 
-  async function saveNotes() {
-    setSavingNotes(true);
-    try {
-      await apiFetch(`/courses/${id}`, { method: 'PUT', body: JSON.stringify({ notes: notesValue }) });
-      setCourse(prev => ({ ...prev, notes: notesValue }));
-      setEditingNotes(false);
-    } catch (err) {
-      alert('Could not save notes: ' + err.message);
-    } finally {
-      setSavingNotes(false);
-    }
+  async function saveField(field, value) {
+    await apiFetch(`/courses/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    loadCourse();
   }
 
   async function handleDelete() {
@@ -109,66 +98,55 @@ export default function CourseDetail() {
             <button className="btn btn-danger btn-small" onClick={() => setDeleting(true)}>Delete</button>
           )}
         </div>
-        {course.description && <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>{course.description}</p>}
+        <InlineEditField
+          label="Description"
+          value={course.description}
+          onSave={v => saveField('description', v)}
+          type="textarea"
+          placeholder="Add a description for this course..."
+        />
         <div className="detail-grid">
-          <div className="detail-field">
-            <div className="detail-field-label">Delivery</div>
-            <div className="detail-field-value">{course.delivery_type.replace('_', '-')}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Effectiveness</div>
-            <div className="detail-field-value">{course.effectiveness_score ? `${course.effectiveness_score}/5` : '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Modules</div>
-            <div className="detail-field-value">{modules.length}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Last Updated By</div>
-            <div className="detail-field-value">{course.last_updated_by_name || '—'}</div>
-          </div>
+          <InlineEditField
+            label="Delivery"
+            value={course.delivery_type}
+            onSave={v => saveField('delivery_type', v)}
+            type="select"
+            options={[
+              { value: 'online', label: 'Online' },
+              { value: 'in_person', label: 'In-Person' },
+              { value: 'both', label: 'Both' },
+            ]}
+            displayValue={course.delivery_type ? course.delivery_type.replace('_', '-') : null}
+          />
+          <InlineEditField
+            label="Effectiveness"
+            value={course.effectiveness_score}
+            onSave={v => saveField('effectiveness_score', v)}
+            type="number"
+            placeholder="1–5"
+            displayValue={course.effectiveness_score ? `${course.effectiveness_score}/5` : null}
+          />
+          <InlineEditField
+            label="Modules"
+            value={modules.length}
+            onSave={() => {}}
+            readOnly={true}
+          />
+          <InlineEditField
+            label="Last Updated By"
+            value={course.last_updated_by_name}
+            onSave={() => {}}
+            readOnly={true}
+          />
         </div>
 
-        {/* Notes — always visible, inline editable */}
-        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notes</span>
-            {!editingNotes && (
-              <button className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={() => { setNotesValue(course.notes || ''); setEditingNotes(true); }}>
-                {course.notes ? 'Edit' : '+ Add Notes'}
-              </button>
-            )}
-          </div>
-          {editingNotes ? (
-            <div>
-              <textarea
-                value={notesValue}
-                onChange={e => setNotesValue(e.target.value)}
-                rows={4}
-                autoFocus
-                placeholder="Add notes, context, delivery tips, or any information about this course..."
-                style={{ width: '100%', fontSize: 13, padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontFamily: 'inherit', lineHeight: 1.5, resize: 'vertical', boxSizing: 'border-box' }}
-              />
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <button className="btn btn-primary btn-small" onClick={saveNotes} disabled={savingNotes}>{savingNotes ? 'Saving...' : 'Save Notes'}</button>
-                <button className="btn btn-secondary btn-small" onClick={() => setEditingNotes(false)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <div
-              onClick={() => { setNotesValue(course.notes || ''); setEditingNotes(true); }}
-              style={{
-                fontSize: 13, color: course.notes ? 'var(--text-primary)' : 'var(--text-secondary)',
-                lineHeight: 1.6, whiteSpace: 'pre-wrap', cursor: 'text',
-                minHeight: 36, padding: '6px 10px',
-                background: course.notes ? '#FAFAFA' : '#F8FAFC',
-                border: '1px dashed var(--border-color)', borderRadius: 'var(--radius)',
-              }}
-            >
-              {course.notes || 'Click to add notes — or use the AI input below to add information and it will appear here.'}
-            </div>
-          )}
-        </div>
+        <InlineEditField
+          label="Notes"
+          value={course.notes}
+          onSave={v => saveField('notes', v)}
+          type="textarea"
+          placeholder="Add notes, context, delivery tips..."
+        />
       </div>
 
       {/* AI Suggestions */}

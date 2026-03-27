@@ -6,6 +6,7 @@ import SectorBadge from '../../components/SectorBadge.jsx';
 import Modal from '../../components/Modal.jsx';
 import EngagementForm from './EngagementForm.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const TYPE_LABELS = { ethical_ai_policy: 'Ethical AI Policy', ai_legal_framework: 'AI Legal Framework', ai_security_framework: 'AI Security Framework', mentorship: 'Mentorship' };
 const STATUS_LABELS = { scoping: 'Scoping', active: 'Active', review: 'Review', completed: 'Completed' };
@@ -44,6 +45,11 @@ export default function EngagementDetail() {
       setActiveTab(engagement.type === 'mentorship' ? 'sessions' : 'milestones');
     }
   }, [engagement?.type]);
+
+  async function saveField(field, value) {
+    await apiFetch(`/service-engagements/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    loadEngagement();
+  }
 
   async function handleDelete() {
     await apiFetch(`/service-engagements/${id}`, { method: 'DELETE' });
@@ -98,26 +104,49 @@ export default function EngagementDetail() {
             <div className="detail-field-label">Mentor / Consultant</div>
             <div className="detail-field-value">{engagement.mentor_name || 'Unassigned'}</div>
           </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Start Date</div>
-            <div className="detail-field-value">{engagement.start_date ? new Date(engagement.start_date).toLocaleDateString() : '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">End Date</div>
-            <div className="detail-field-value">{engagement.end_date ? new Date(engagement.end_date).toLocaleDateString() : '—'}</div>
-          </div>
+          <InlineEditField
+            label="Status"
+            value={engagement.status}
+            onSave={v => saveField('status', v)}
+            type="select"
+            options={[
+              { value: 'scoping', label: 'Scoping' },
+              { value: 'active', label: 'Active' },
+              { value: 'review', label: 'Review' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            displayValue={<span className={`stage-badge status-${engagement.status}`}>{STATUS_LABELS[engagement.status]}</span>}
+          />
+          <InlineEditField
+            label="Start Date"
+            value={engagement.start_date ? engagement.start_date.slice(0, 10) : ''}
+            onSave={v => saveField('start_date', v)}
+            type="date"
+            displayValue={engagement.start_date ? new Date(engagement.start_date).toLocaleDateString() : null}
+          />
+          <InlineEditField
+            label="End Date"
+            value={engagement.end_date ? engagement.end_date.slice(0, 10) : ''}
+            onSave={v => saveField('end_date', v)}
+            type="date"
+            displayValue={engagement.end_date ? new Date(engagement.end_date).toLocaleDateString() : null}
+          />
           {isMentorship && (
-            <div className="detail-field">
-              <div className="detail-field-label">Sessions</div>
-              <div className="detail-field-value">{sessions.length}</div>
-            </div>
+            <InlineEditField
+              label="Sessions"
+              value={sessions.length}
+              onSave={() => {}}
+              readOnly={true}
+            />
           )}
-          {engagement.deliverable_url && (
-            <div className="detail-field">
-              <div className="detail-field-label">Deliverable</div>
-              <div className="detail-field-value"><a href={engagement.deliverable_url} target="_blank" rel="noopener">View</a></div>
-            </div>
-          )}
+          <InlineEditField
+            label="Deliverable URL"
+            value={engagement.deliverable_url}
+            onSave={v => saveField('deliverable_url', v)}
+            type="url"
+            placeholder="https://..."
+            displayValue={engagement.deliverable_url ? <a href={engagement.deliverable_url} target="_blank" rel="noopener">View</a> : null}
+          />
           {engagement.document_id && (
             <div className="detail-field">
               <div className="detail-field-label">Generated Document</div>
@@ -125,11 +154,13 @@ export default function EngagementDetail() {
             </div>
           )}
         </div>
-        {engagement.notes && (
-          <div style={{ marginTop: 12, padding: '10px 14px', background: '#F8FAFC', borderRadius: 'var(--radius)', fontSize: 14 }}>
-            <strong>Notes:</strong> {engagement.notes}
-          </div>
-        )}
+        <InlineEditField
+          label="Notes"
+          value={engagement.notes}
+          onSave={v => saveField('notes', v)}
+          type="textarea"
+          placeholder="Add notes about this engagement..."
+        />
       </div>
 
       {/* Tabs */}

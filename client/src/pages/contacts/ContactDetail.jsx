@@ -6,6 +6,7 @@ import SectorBadge from '../../components/SectorBadge.jsx';
 import ContactForm from './ContactForm.jsx';
 import Modal from '../../components/Modal.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const STAGE_LABELS = {
   pending_review: 'Pending Review', prospect: 'Prospect', contacted: 'Contacted',
@@ -45,6 +46,11 @@ export default function ContactDetail() {
   useEffect(() => {
     if (activeTab === 'emails' && emails.length === 0 && contact?.email) loadEmails();
   }, [activeTab, contact]);
+
+  async function saveField(field, value) {
+    await apiFetch(`/contacts/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    load();
+  }
 
   async function handleDelete() {
     await apiFetch(`/contacts/${id}`, { method: 'DELETE' });
@@ -116,18 +122,28 @@ export default function ContactDetail() {
           </div>
         </div>
         <div className="detail-grid">
-          <div className="detail-field">
-            <div className="detail-field-label">Email</div>
-            <div className="detail-field-value">{contact.email ? <a href={`mailto:${contact.email}`}>{contact.email}</a> : '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Phone</div>
-            <div className="detail-field-value">{contact.phone || '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Job Title</div>
-            <div className="detail-field-value">{contact.job_title || '—'}</div>
-          </div>
+          <InlineEditField
+            label="Email"
+            value={contact.email}
+            onSave={v => saveField('email', v)}
+            type="email"
+            placeholder="email@example.com"
+            displayValue={contact.email ? <a href={`mailto:${contact.email}`}>{contact.email}</a> : null}
+          />
+          <InlineEditField
+            label="Phone"
+            value={contact.phone}
+            onSave={v => saveField('phone', v)}
+            type="text"
+            placeholder="Phone number..."
+          />
+          <InlineEditField
+            label="Job Title"
+            value={contact.job_title}
+            onSave={v => saveField('job_title', v)}
+            type="text"
+            placeholder="Job title..."
+          />
           <div className="detail-field">
             <div className="detail-field-label">Organisation</div>
             <div className="detail-field-value">
@@ -136,22 +152,36 @@ export default function ContactDetail() {
               ) : '—'}
             </div>
           </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Source</div>
-            <div className="detail-field-value">{contact.source || '—'}</div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">Last Contacted</div>
-            <div className="detail-field-value">
-              {contact.last_contacted_at ? new Date(contact.last_contacted_at).toLocaleDateString() : '—'}
-            </div>
-          </div>
-          <div className="detail-field">
-            <div className="detail-field-label">LinkedIn</div>
-            <div className="detail-field-value">
-              {contact.linkedin_url ? <a href={contact.linkedin_url} target="_blank" rel="noreferrer">{contact.linkedin_url}</a> : '—'}
-            </div>
-          </div>
+          <InlineEditField
+            label="Source"
+            value={contact.source}
+            onSave={v => saveField('source', v)}
+            type="text"
+            placeholder="Source..."
+          />
+          <InlineEditField
+            label="Last Contacted"
+            value={contact.last_contacted_at ? contact.last_contacted_at.slice(0, 10) : ''}
+            onSave={v => saveField('last_contacted_at', v)}
+            type="date"
+            displayValue={contact.last_contacted_at ? new Date(contact.last_contacted_at).toLocaleDateString() : null}
+          />
+          <InlineEditField
+            label="LinkedIn"
+            value={contact.linkedin_url}
+            onSave={v => saveField('linkedin_url', v)}
+            type="url"
+            placeholder="https://linkedin.com/in/..."
+            displayValue={contact.linkedin_url ? <a href={contact.linkedin_url} target="_blank" rel="noreferrer">{contact.linkedin_url}</a> : null}
+          />
+          <InlineEditField
+            label="Pipeline Stage"
+            value={contact.pipeline_stage}
+            onSave={v => saveField('pipeline_stage', v)}
+            type="select"
+            options={Object.entries(STAGE_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            displayValue={<span style={{ padding: '3px 10px', borderRadius: 12, fontSize: 12, fontWeight: 600, background: (STAGE_COLORS[contact.pipeline_stage] || '#94A3B8') + '22', color: STAGE_COLORS[contact.pipeline_stage] || '#94A3B8' }}>{STAGE_LABELS[contact.pipeline_stage] || contact.pipeline_stage}</span>}
+          />
           <div className="detail-field">
             <div className="detail-field-label">Tags</div>
             <div className="detail-field-value" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -161,12 +191,13 @@ export default function ContactDetail() {
             </div>
           </div>
         </div>
-        {contact.notes && (
-          <div style={{ marginTop: 16 }}>
-            <div className="detail-field-label">Notes</div>
-            <div className="detail-field-value" style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6, background: '#F8FAFC', padding: 12, borderRadius: 6 }}>{contact.notes}</div>
-          </div>
-        )}
+        <InlineEditField
+          label="Notes"
+          value={contact.notes}
+          onSave={v => saveField('notes', v)}
+          type="textarea"
+          placeholder="Add notes about this contact..."
+        />
       </div>
 
       {/* Tabs: Details / Email History */}

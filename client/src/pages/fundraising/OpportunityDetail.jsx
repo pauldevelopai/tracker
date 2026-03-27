@@ -6,6 +6,7 @@ import SectorBadge from '../../components/SectorBadge.jsx';
 import Modal from '../../components/Modal.jsx';
 import OpportunityForm from './OpportunityForm.jsx';
 import SmartInput from '../../components/SmartInput.jsx';
+import InlineEditField from '../../components/InlineEditField.jsx';
 
 const STAGE_LABELS = { identified: 'Identified', qualified: 'Qualified', applying: 'Applying', submitted: 'Submitted', decision: 'Decision', won: 'Won', lost: 'Lost' };
 const APP_STATUSES = ['drafting', 'internal_review', 'submitted', 'shortlisted', 'awarded', 'rejected'];
@@ -31,6 +32,11 @@ export default function OpportunityDetail() {
   function loadApps() { apiFetch(`/funding-opportunities/${id}/applications`).then(setApplications).catch(() => setApplications([])); }
 
   useEffect(() => { loadOpp(); loadApps(); }, [id]);
+
+  async function saveField(field, value) {
+    await apiFetch(`/funding-opportunities/${id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) });
+    loadOpp();
+  }
 
   // Load reports for first application
   useEffect(() => {
@@ -144,12 +150,54 @@ export default function OpportunityDetail() {
         </div>
         <div className="detail-grid">
           <div className="detail-field"><div className="detail-field-label">Funder</div><div className="detail-field-value">{opp.funder_name ? <Link to={`/fundraising/funders/${opp.funder_id}`}>{opp.funder_name}</Link> : '—'}</div></div>
-          <div className="detail-field"><div className="detail-field-label">Amount Range</div><div className="detail-field-value">{formatCurrency(opp.amount_min)} — {formatCurrency(opp.amount_max)}</div></div>
-          <div className="detail-field"><div className="detail-field-label">Deadline</div><div className="detail-field-value">{opp.deadline ? new Date(opp.deadline).toLocaleDateString() : '—'}</div></div>
+          <InlineEditField
+            label="Pipeline Stage"
+            value={opp.pipeline_stage}
+            onSave={v => saveField('pipeline_stage', v)}
+            type="select"
+            options={Object.entries(STAGE_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+            displayValue={<span className={`stage-badge pipe-${opp.pipeline_stage}`}>{STAGE_LABELS[opp.pipeline_stage]}</span>}
+          />
+          <InlineEditField
+            label="Amount Min"
+            value={opp.amount_min}
+            onSave={v => saveField('amount_min', v)}
+            type="number"
+            placeholder="e.g. 5000"
+            displayValue={opp.amount_min ? formatCurrency(opp.amount_min) : null}
+          />
+          <InlineEditField
+            label="Amount Max"
+            value={opp.amount_max}
+            onSave={v => saveField('amount_max', v)}
+            type="number"
+            placeholder="e.g. 50000"
+            displayValue={opp.amount_max ? formatCurrency(opp.amount_max) : null}
+          />
+          <InlineEditField
+            label="Deadline"
+            value={opp.deadline ? opp.deadline.slice(0, 10) : ''}
+            onSave={v => saveField('deadline', v)}
+            type="date"
+            displayValue={opp.deadline ? new Date(opp.deadline).toLocaleDateString() : null}
+          />
           <div className="detail-field"><div className="detail-field-label">Match Funding</div><div className="detail-field-value">{opp.match_funding_required ? `Yes — ${formatCurrency(opp.match_funding_amount)}` : 'No'}</div></div>
+          <InlineEditField
+            label="Funding Call URL"
+            value={opp.url}
+            onSave={v => saveField('url', v)}
+            type="url"
+            placeholder="https://..."
+            displayValue={opp.url ? <a href={opp.url} target="_blank" rel="noopener" style={{ fontSize: 13 }}>View funding call →</a> : null}
+          />
         </div>
-        {opp.description && <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 12 }}>{opp.description}</p>}
-        {opp.url && <div style={{ marginTop: 8 }}><a href={opp.url} target="_blank" rel="noopener" style={{ fontSize: 13 }}>View funding call →</a></div>}
+        <InlineEditField
+          label="Description"
+          value={opp.description}
+          onSave={v => saveField('description', v)}
+          type="textarea"
+          placeholder="Add a description of this funding opportunity..."
+        />
       </div>
 
       {/* AI Research Notes */}
