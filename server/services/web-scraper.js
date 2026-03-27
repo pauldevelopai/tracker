@@ -251,3 +251,186 @@ Output format: just comma-separated numbers, nothing else. Example: 1,3,5,12,15`
     scraped: scraped[i]?.success || false,
   }));
 }
+
+// ========================================================================
+// LEAD PROSPECTING SCRAPER
+// Scrapes directories, association lists, and industry pages for potential
+// organisations to sell AI training to
+// ========================================================================
+
+const LEAD_SOURCES = {
+  media: [
+    // Media directories & associations
+    { url: 'https://gijn.org/network/', name: 'GIJN Member Network', type: 'directory', selector: 'article a, .member a, h3 a, .card a' },
+    { url: 'https://wan-ifra.org/members/', name: 'WAN-IFRA Members', type: 'directory', selector: 'article a, .member a, h3 a' },
+    { url: 'https://gfmd.info/members/', name: 'GFMD Members', type: 'directory', selector: 'article a, .member a, h3 a' },
+    { url: 'https://www.icfj.org/our-work/knight-international-journalism-fellowships', name: 'ICFJ Knight Fellows', type: 'directory', selector: 'article a, h3 a' },
+    // African media directories
+    { url: 'https://journalism.co.za/resources/', name: 'SA Media Directory', type: 'directory', selector: 'article a, h3 a, li a' },
+    { url: 'https://www.amdi.africa/', name: 'African Media Development Initiative', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://africacheck.org/partners', name: 'Africa Check Partners', type: 'directory', selector: 'article a, h3 a, .partner a' },
+    { url: 'https://www.misa.org/members/', name: 'MISA Members (Southern Africa)', type: 'directory', selector: 'article a, h3 a, li a' },
+    // European/exiled media
+    { url: 'https://rsf.org/en/barometer', name: 'RSF Press Freedom Index', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.mappingmediafreedomineurope.eu/', name: 'EU Media Freedom Map', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.journalismfund.eu/supported-projects', name: 'Journalism Fund EU Projects', type: 'directory', selector: 'article a, h3 a' },
+    // Newsroom innovation
+    { url: 'https://www.lenfestinstitute.org/solution-set/', name: 'Lenfest Solution Set', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.americanpressinstitute.org/', name: 'American Press Institute', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://newsinitiative.withgoogle.com/programs/', name: 'Google News Initiative', type: 'directory', selector: 'article a, h3 a' },
+    // Media training providers (competitors & partners)
+    { url: 'https://datajournalism.com/', name: 'Data Journalism', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.internews.org/areas-of-expertise/', name: 'Internews', type: 'directory', selector: 'article a, h3 a' },
+    // Foundations funding media
+    { url: 'https://www.luminate.group/what-we-do/', name: 'Luminate Group', type: 'funder', selector: 'article a, h3 a' },
+    { url: 'https://www.opensocietyfoundations.org/what-we-do/themes/journalism', name: 'Open Society (Journalism)', type: 'funder', selector: 'article a, h3 a' },
+    { url: 'https://www.macfound.org/programs/journalism-media/', name: 'MacArthur (Journalism)', type: 'funder', selector: 'article a, h3 a' },
+  ],
+  legal: [
+    // Legal tech directories
+    { url: 'https://www.artificiallawyer.com/legal-tech-list/', name: 'Artificial Lawyer Directory', type: 'directory', selector: 'article a, h3 a, li a' },
+    { url: 'https://law-tech-a2j.org/', name: 'Law Tech A2J', type: 'directory', selector: 'article a, h3 a' },
+    // Law societies & associations
+    { url: 'https://www.lawsociety.org.uk/topics/research/technology-and-law', name: 'Law Society UK Tech', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.ibanet.org/', name: 'International Bar Association', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.lawsociety.org.za/', name: 'Law Society of SA', type: 'directory', selector: 'article a, h3 a, li a' },
+    // Pro bono / access to justice
+    { url: 'https://www.probono.org.za/', name: 'ProBono.org SA', type: 'directory', selector: 'article a, h3 a' },
+    { url: 'https://www.a2justice.org/', name: 'A2Justice', type: 'directory', selector: 'article a, h3 a' },
+    // Legal innovation hubs
+    { url: 'https://legal-tech-blog.de/legal-tech-map/', name: 'Legal Tech Map', type: 'directory', selector: 'article a, h3 a, li a' },
+    { url: 'https://www.legalgeek.co/', name: 'Legal Geek', type: 'directory', selector: 'article a, h3 a' },
+    // Legal AI companies (potential partners)
+    { url: 'https://www.legaltechhub.io/', name: 'Legal Tech Hub', type: 'directory', selector: 'article a, h3 a, .card a' },
+  ],
+  general: [
+    // AI ethics & governance orgs (need training themselves)
+    { url: 'https://www.partnershiponai.org/partners/', name: 'Partnership on AI Members', type: 'directory', selector: 'article a, h3 a, .partner a' },
+    { url: 'https://www.weforum.org/communities/global-ai-council/', name: 'WEF AI Council', type: 'directory', selector: 'article a, h3 a' },
+    // Training / education (competitors & partners)
+    { url: 'https://www.coursera.org/search?query=AI%20ethics', name: 'Coursera AI Ethics', type: 'competitor', selector: 'a[data-click-key], h3 a' },
+    // African tech hubs
+    { url: 'https://www.afrilabs.com/members/', name: 'AfriLabs Members', type: 'directory', selector: 'article a, h3 a, .member a' },
+    { url: 'https://gloafrica.com/', name: 'GLO Africa', type: 'directory', selector: 'article a, h3 a' },
+    // Development / donor orgs
+    { url: 'https://www.usaid.gov/digital-development', name: 'USAID Digital', type: 'funder', selector: 'article a, h3 a' },
+    { url: 'https://www.dfid.gov.uk/', name: 'UK Aid', type: 'funder', selector: 'article a, h3 a' },
+    { url: 'https://www.sida.se/en/for-partners', name: 'SIDA', type: 'funder', selector: 'article a, h3 a' },
+    { url: 'https://www.giz.de/en/worldwide/programmes.html', name: 'GIZ', type: 'funder', selector: 'article a, h3 a' },
+  ],
+};
+
+// Scrape directories and listings for potential lead organisations
+export async function scrapeLeadProspects(sectorName) {
+  const sectorKey = sectorName?.toLowerCase() || 'general';
+  const sources = [...(LEAD_SOURCES[sectorKey] || []), ...LEAD_SOURCES.general];
+  const allOrgs = [];
+  let sourcesScanned = 0;
+
+  console.log(`[LeadScraper] Scanning ${sources.length} directories for ${sectorName || 'all sectors'}...`);
+
+  // Scrape in batches of 5
+  const batches = [];
+  for (let i = 0; i < sources.length; i += 5) {
+    batches.push(sources.slice(i, i + 5));
+  }
+
+  for (const batch of batches) {
+    const results = await Promise.allSettled(batch.map(async (source) => {
+      const { data } = await axios.get(source.url, {
+        timeout: 10000,
+        headers: { 'User-Agent': USER_AGENT },
+        maxRedirects: 3,
+      });
+      const $ = cheerio.load(data);
+      const items = [];
+
+      // Extract org names and links
+      $(source.selector || 'article a, h3 a, li a, .card a').each((i, el) => {
+        if (i >= 15) return false; // max 15 per source
+        const href = $(el).attr('href');
+        const text = $(el).text().trim();
+        if (text && text.length > 3 && text.length < 150 && !text.includes('Read more') && !text.includes('Learn more')) {
+          const fullUrl = href && href.startsWith('http') ? href : (href ? new URL(href, source.url).toString() : null);
+          items.push({
+            name: text.slice(0, 150),
+            url: fullUrl,
+            source: source.name,
+            sourceType: source.type,
+          });
+        }
+      });
+
+      // Also try to get meta description for context
+      const description = $('meta[name="description"]').attr('content') || '';
+
+      return { source: source.name, items, description };
+    }));
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.items.length > 0) {
+        allOrgs.push(...result.value.items);
+        sourcesScanned++;
+        console.log(`[LeadScraper] ${result.value.source}: ${result.value.items.length} items`);
+      }
+    }
+
+    if (batches.indexOf(batch) < batches.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  console.log(`[LeadScraper] Scanned ${sourcesScanned} sources, found ${allOrgs.length} raw items`);
+
+  // Deduplicate by name (case-insensitive)
+  const seen = new Set();
+  const unique = allOrgs.filter(o => {
+    const key = o.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (key.length < 3 || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (unique.length === 0) return [];
+
+  // Claude filters for actual organisations that could be leads
+  try {
+    const { callClaude } = await import('./claude.js');
+    const orgList = unique.slice(0, 150).map((o, i) => `${i+1}. "${o.name}" (from ${o.source}, type: ${o.sourceType})`).join('\n');
+
+    const filterResult = await callClaude({
+      system: `You are identifying potential client organisations for Develop AI, which sells AI training, ethical AI policy creation, AI legal frameworks, and AI security protocols to media organisations, law firms, NGOs, foundations, and professional associations.
+
+From this list of scraped names, identify which ones are REAL ORGANISATIONS (not page headings, menu items, or generic text) that could plausibly need AI training or AI governance services.
+
+For each real organisation, rate them:
+- HOT: Media company, newsroom, law firm, NGO, or foundation that clearly works in journalism, legal, or development
+- WARM: Professional association, training body, or tech org that could need AI ethics/policy work
+- COLD: Tangentially related — might need AI training but unclear
+
+Return as JSON array: [{"num": 1, "rating": "hot"}, {"num": 5, "rating": "warm"}]
+Only include real organisations. Skip menu items, article titles, generic phrases.`,
+      userContent: `Classify these ${unique.length} scraped items for ${sectorName || 'cross-sector'} lead potential:\n\n${orgList}`,
+      maxTokens: 2000,
+      temperature: 0.1,
+    });
+
+    // Parse JSON from Claude response
+    const jsonMatch = filterResult.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const classified = JSON.parse(jsonMatch[0]);
+      const prospects = classified
+        .filter(c => c.num > 0 && c.num <= unique.length)
+        .map(c => ({
+          ...unique[c.num - 1],
+          warmth: c.rating,
+        }));
+
+      console.log(`[LeadScraper] Claude classified ${prospects.length} as real organisations (${prospects.filter(p => p.warmth === 'hot').length} hot, ${prospects.filter(p => p.warmth === 'warm').length} warm, ${prospects.filter(p => p.warmth === 'cold').length} cold)`);
+      return prospects;
+    }
+  } catch (e) {
+    console.log(`[LeadScraper] Claude classification failed: ${e.message}`);
+  }
+
+  // Fallback: return all unique items as cold
+  return unique.slice(0, 50).map(o => ({ ...o, warmth: 'cold' }));
+}
