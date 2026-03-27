@@ -62,6 +62,11 @@ router.post('/:id/knowledge', async (req, res) => {
     const { rows: [item] } = await pool.query('SELECT * FROM industry_intelligence WHERE id = $1', [req.params.id]);
     if (!item) return res.status(404).json({ message: 'Not found' });
 
+    // Merge user-selected tags with auto-generated tags
+    const userTags = Array.isArray(req.body?.tags) ? req.body.tags : [];
+    const autoTags = [item.category, 'intelligence'].filter(Boolean);
+    const allTags = [...new Set([...userTags, ...autoTags])];
+
     const knowledgeId = await createKnowledgeEntry({
       category: 'industry_trend',
       subcategory: item.category,
@@ -72,7 +77,7 @@ router.post('/:id/knowledge', async (req, res) => {
       sourceId: item.id,
       sourceDescription: `Promoted from industry intelligence: ${item.source || 'background research'}`,
       confidence: item.relevance_score || 0.7,
-      tags: [item.category, 'intelligence'],
+      tags: allTags,
     });
 
     res.status(201).json({ knowledge_id: knowledgeId });

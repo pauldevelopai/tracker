@@ -76,6 +76,11 @@ router.post('/:id/promote', async (req, res) => {
       sectorId = rows[0]?.id || null;
     }
 
+    // Merge user-selected tags with auto-generated tags
+    const userTags = Array.isArray(req.body?.tags) ? req.body.tags : [];
+    const autoTags = ['newsletter', item.category, ...(item.relevant_sectors || []).map(s => s.toLowerCase())].filter(Boolean);
+    const allTags = [...new Set([...userTags, ...autoTags])];
+
     const knowledgeId = await createKnowledgeEntry({
       category: 'industry_trend',
       subcategory: item.category,
@@ -86,7 +91,7 @@ router.post('/:id/promote', async (req, res) => {
       sourceDescription: `Newsletter from ${item.sender}: ${item.subject}`,
       sourceUrl: item.source_url || null,
       confidence: 0.65,
-      tags: ['newsletter', item.category, ...(item.relevant_sectors || []).map(s => s.toLowerCase())],
+      tags: allTags,
     });
 
     await pool.query('UPDATE newsletter_items SET promoted_to_knowledge = true WHERE id = $1', [req.params.id]);

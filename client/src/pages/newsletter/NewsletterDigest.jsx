@@ -9,6 +9,17 @@ const CATEGORY_LABELS = {
   training_trend: 'Training Trend', framework: 'Framework',
 };
 
+const KNOWLEDGE_TAGS = [
+  { value: 'research', label: 'Research', color: '#6366F1' },
+  { value: 'tools', label: 'Tools', color: '#10B981' },
+  { value: 'policy', label: 'Policy', color: '#EF4444' },
+  { value: 'ethics', label: 'Ethics', color: '#8B5CF6' },
+  { value: 'industry_news', label: 'Industry News', color: '#94A3B8' },
+  { value: 'curriculum', label: 'Curriculum', color: '#3B82F6' },
+  { value: 'security', label: 'Security', color: '#F59E0B' },
+  { value: 'legal', label: 'Legal', color: '#EC4899' },
+];
+
 const CATEGORY_COLORS = {
   ai_tool: '#6366F1', regulation: '#EF4444', technique: '#10B981',
   use_case: '#F59E0B', industry_news: '#94A3B8', opinion: '#8B5CF6',
@@ -57,8 +68,11 @@ export default function NewsletterDigest() {
     else if (activeTab === 'curriculum') loadCurriculum();
   }, [activeTab, selectedDate]);
 
-  async function promoteToKnowledge(id) {
-    await apiFetch(`/newsletter/${id}/promote`, { method: 'POST' });
+  async function promoteToKnowledge(id, tags) {
+    await apiFetch(`/newsletter/${id}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({ tags }),
+    });
     if (activeTab === 'digest') loadDigest(); else loadCurriculum();
   }
 
@@ -289,6 +303,19 @@ export default function NewsletterDigest() {
 }
 
 function NewsItem({ item, onPromote, onToggle, showDate }) {
+  const [tagging, setTagging] = useState(false);
+  const [selectedTags, setSelectedTags] = useState([]);
+
+  function toggleTag(tag) {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  }
+
+  async function confirmPromote() {
+    await onPromote(item.id, selectedTags);
+    setTagging(false);
+    setSelectedTags([]);
+  }
+
   return (
     <div className="card" style={{
       marginBottom: 6, padding: 14,
@@ -325,12 +352,43 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
             {item.received_at && <span style={{ color: '#94A3B8' }}>•</span>}
             {item.received_at && <span>{new Date(item.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
           </div>
+          {/* Tag picker */}
+          {tagging && (
+            <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8FAFC', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Select knowledge tags:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {KNOWLEDGE_TAGS.map(tag => (
+                  <button key={tag.value} onClick={() => toggleTag(tag.value)} style={{
+                    fontSize: 11, padding: '3px 10px', borderRadius: 12, border: '1.5px solid',
+                    borderColor: selectedTags.includes(tag.value) ? tag.color : '#D1D5DB',
+                    background: selectedTags.includes(tag.value) ? tag.color : 'white',
+                    color: selectedTags.includes(tag.value) ? 'white' : '#374151',
+                    cursor: 'pointer', fontWeight: selectedTags.includes(tag.value) ? 600 : 400,
+                    transition: 'all 0.15s',
+                  }}>
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-primary btn-small" onClick={confirmPromote} style={{ fontSize: 11 }}>
+                  Add to Knowledge {selectedTags.length > 0 ? `(${selectedTags.length} tags)` : ''}
+                </button>
+                <button className="btn btn-secondary btn-small" onClick={() => { setTagging(false); setSelectedTags([]); }} style={{ fontSize: 11 }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8, flexShrink: 0 }}>
-          {item.is_curriculum_relevant && !item.promoted_to_knowledge && (
-            <button className="btn btn-primary btn-small" onClick={() => onPromote(item.id)} style={{ fontSize: 10 }}>
+          {item.is_curriculum_relevant && !item.promoted_to_knowledge && !tagging && (
+            <button className="btn btn-primary btn-small" onClick={() => setTagging(true)} style={{ fontSize: 10 }}>
               + Knowledge
             </button>
+          )}
+          {item.promoted_to_knowledge && (
+            <span style={{ fontSize: 10, color: '#10B981', fontWeight: 600 }}>✓ Knowledge</span>
           )}
           <button className="btn btn-secondary btn-small" onClick={() => onToggle(item)} style={{ fontSize: 10 }}>
             {item.is_curriculum_relevant ? 'Not Curriculum' : 'Mark Curriculum'}

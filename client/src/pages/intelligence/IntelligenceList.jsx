@@ -11,10 +11,23 @@ const CATEGORY_LABELS = {
   competitor_move: 'Competitor',
 };
 
+const KNOWLEDGE_TAGS = [
+  { value: 'research', label: 'Research', color: '#6366F1' },
+  { value: 'tools', label: 'Tools', color: '#10B981' },
+  { value: 'policy', label: 'Policy', color: '#EF4444' },
+  { value: 'ethics', label: 'Ethics', color: '#8B5CF6' },
+  { value: 'industry_news', label: 'Industry News', color: '#94A3B8' },
+  { value: 'curriculum', label: 'Curriculum', color: '#3B82F6' },
+  { value: 'security', label: 'Security', color: '#F59E0B' },
+  { value: 'legal', label: 'Legal', color: '#EC4899' },
+];
+
 export default function IntelligenceList() {
   const { selectedSectorId } = useSectors();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
+  const [taggingId, setTaggingId] = useState(null);
+  const [selectedTags, setSelectedTags] = useState([]);
 
   function load() {
     let url = '/intelligence?';
@@ -25,9 +38,23 @@ export default function IntelligenceList() {
 
   useEffect(load, [selectedSectorId, filter]);
 
-  async function promoteToKnowledge(id) {
-    await apiFetch(`/intelligence/${id}/knowledge`, { method: 'POST' });
-    alert('Promoted to knowledge base');
+  function startTagging(id) {
+    setTaggingId(id);
+    setSelectedTags([]);
+  }
+
+  function toggleTag(tag) {
+    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  }
+
+  async function confirmPromote(id) {
+    await apiFetch(`/intelligence/${id}/knowledge`, {
+      method: 'POST',
+      body: JSON.stringify({ tags: selectedTags }),
+    });
+    setTaggingId(null);
+    setSelectedTags([]);
+    load();
   }
 
   async function markReviewed(id, action) {
@@ -75,11 +102,42 @@ export default function IntelligenceList() {
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Source: {item.source_description}</div>
                 )}
                 {item.action_taken && <div style={{ fontSize: 12, marginTop: 6, color: '#10B981' }}>Action: {item.action_taken}</div>}
+
+                {/* Inline tag picker */}
+                {taggingId === item.id && (
+                  <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8FAFC', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Select knowledge tags:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                      {KNOWLEDGE_TAGS.map(tag => (
+                        <button key={tag.value} onClick={() => toggleTag(tag.value)} style={{
+                          fontSize: 11, padding: '3px 10px', borderRadius: 12, border: '1.5px solid',
+                          borderColor: selectedTags.includes(tag.value) ? tag.color : '#D1D5DB',
+                          background: selectedTags.includes(tag.value) ? tag.color : 'white',
+                          color: selectedTags.includes(tag.value) ? 'white' : '#374151',
+                          cursor: 'pointer', fontWeight: selectedTags.includes(tag.value) ? 600 : 400,
+                          transition: 'all 0.15s',
+                        }}>
+                          {tag.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn btn-primary btn-small" onClick={() => confirmPromote(item.id)} style={{ fontSize: 11 }}>
+                        Add to Knowledge {selectedTags.length > 0 ? `(${selectedTags.length} tags)` : ''}
+                      </button>
+                      <button className="btn btn-secondary btn-small" onClick={() => setTaggingId(null)} style={{ fontSize: 11 }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 4, marginLeft: 12, flexShrink: 0 }}>
-                <button className="btn btn-primary btn-small" onClick={() => promoteToKnowledge(item.id)} style={{ fontSize: 11 }}>
-                  + Knowledge
-                </button>
+                {taggingId !== item.id && (
+                  <button className="btn btn-primary btn-small" onClick={() => startTagging(item.id)} style={{ fontSize: 11 }}>
+                    + Knowledge
+                  </button>
+                )}
                 {!item.action_taken && (
                   <button className="btn btn-secondary btn-small" onClick={() => markReviewed(item.id, 'Reviewed, noted')} style={{ fontSize: 11 }}>
                     Reviewed
