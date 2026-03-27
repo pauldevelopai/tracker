@@ -990,31 +990,60 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
   return { result: results.join('\n') || `Processed ${itemsProcessed} new leads`, itemsProcessed };
 }
 
-// Web Lead Prospector — scrapes directories for new organisations
+// Web Lead Prospector — scrapes directories AND searches the web for companies
 export async function runWebProspector() {
   let itemsProcessed = 0;
   const results = [];
 
   try {
-    const { scrapeLeadProspects } = await import('./web-scraper.js');
+    const { scrapeLeadProspects, searchForCompanies } = await import('./web-scraper.js');
 
-    // Get existing org names to avoid duplicates
+    // Get existing contacts and orgs to avoid duplicates
+    const { rows: existingContacts } = await pool.query("SELECT LOWER(first_name || ' ' || last_name) AS name FROM contacts");
     const { rows: existingOrgs } = await pool.query('SELECT LOWER(name) AS name FROM organisations');
-    const knownOrgs = new Set(existingOrgs.map(o => o.name));
+    const knownNames = new Set([
+      ...existingContacts.map(c => c.name.trim()),
+      ...existingOrgs.map(o => o.name),
+    ]);
 
     // Get active sectors
     const { rows: sectors } = await pool.query("SELECT id, name FROM sectors WHERE is_active = true");
 
     for (const sector of sectors) {
-      console.log(`[WebProspector] Scanning directories for ${sector.name}...`);
-      const prospects = await scrapeLeadProspects(sector.name);
+      // Phase 1: Scrape known directories
+      console.log(`[WebProspector] Phase 1: Directory scan for ${sector.name}...`);
+      let allProspects = [];
+      try {
+        const directoryProspects = await scrapeLeadProspects(sector.name);
+        allProspects.push(...directoryProspects);
+        console.log(`[WebProspector] Directories found ${directoryProspects.length} prospects`);
+      } catch (e) {
+        console.log(`[WebProspector] Directory scan error: ${e.message}`);
+      }
 
-      for (const prospect of prospects) {
-        const nameKey = prospect.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (knownOrgs.has(prospect.name.toLowerCase())) continue;
-        if (nameKey.length < 3) continue;
+      // Phase 2: Active web search for companies
+      console.log(`[WebProspector] Phase 2: Web search for ${sector.name} companies...`);
+      try {
+        const searchProspects = await searchForCompanies(sector.name);
+        allProspects.push(...searchProspects);
+        console.log(`[WebProspector] Web search found ${searchProspects.length} prospects`);
+      } catch (e) {
+        console.log(`[WebProspector] Web search error: ${e.message}`);
+      }
 
-        // Add as prospect organisation
+      // Deduplicate across both sources
+      const seen = new Set();
+      const unique = allProspects.filter(p => {
+        const key = p.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (key.length < 4 || seen.has(key) || knownNames.has(p.name.toLowerCase())) return false;
+        seen.add(key);
+        return true;
+      });
+
+      console.log(`[WebProspector] ${unique.length} unique new prospects for ${sector.name} after dedup`);
+
+      // Insert as pending_review contacts
+      for (const prospect of unique) {
         try {
           await pool.query(
             `INSERT INTO contacts (sector_id, first_name, last_name, pipeline_stage, source, tags, notes)
@@ -1023,14 +1052,22 @@ export async function runWebProspector() {
               sector.id,
               prospect.name.slice(0, 100),
               `{${prospect.warmth || 'cold'},auto-discovered,web-scraped}`,
-              `Auto-discovered by Web Prospector from ${prospect.source}.\nWarmth: ${prospect.warmth}\nSource URL: ${prospect.url || 'N/A'}\nSource type: ${prospect.sourceType || 'directory'}`
+              [
+                `Auto-discovered by Web Prospector`,
+                `Source: ${prospect.source}`,
+                prospect.url ? `URL: ${prospect.url}` : '',
+                `Warmth: ${prospect.warmth || 'unknown'}`,
+                prospect.potential ? `Potential: ${prospect.potential}` : '',
+                prospect.region ? `Region: ${prospect.region}` : '',
+                prospect.sector ? `Classified sector: ${prospect.sector}` : '',
+              ].filter(Boolean).join('\n')
             ]
           );
           itemsProcessed++;
-          knownOrgs.add(prospect.name.toLowerCase());
-          results.push(`[${prospect.warmth}] ${prospect.name} (from ${prospect.source})`);
+          knownNames.add(prospect.name.toLowerCase());
+          results.push(`[${prospect.warmth}] ${prospect.name} (${prospect.source})`);
         } catch (e) {
-          // Skip duplicates
+          // Skip duplicates or constraint violations
         }
       }
     }

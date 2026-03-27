@@ -434,3 +434,165 @@ Only include real organisations. Skip menu items, article titles, generic phrase
   // Fallback: return all unique items as cold
   return unique.slice(0, 50).map(o => ({ ...o, warmth: 'cold' }));
 }
+
+// ========================================================================
+// ACTIVE COMPANY SEARCH
+// Uses search engines and business listing sites to find companies
+// that could need AI training — cast a much wider net
+// ========================================================================
+
+const COMPANY_SEARCH_SOURCES = {
+  media: [
+    // Search-style pages that list many companies
+    { url: 'https://www.google.com/search?q=newsrooms+adopting+AI+tools+2025+2026&num=20', name: 'Google: Newsrooms + AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=African+media+organisations+digital+transformation&num=20', name: 'Google: African Media Digital', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=exiled+media+organisations+press+freedom&num=20', name: 'Google: Exiled Media', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=media+NGOs+journalism+training+organisations&num=20', name: 'Google: Media NGOs', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=community+newsrooms+South+Africa+Zimbabwe+Kenya&num=20', name: 'Google: Community Newsrooms Africa', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=digital+publishing+companies+AI+editorial+policy&num=20', name: 'Google: Digital Publishing + AI', selector: 'a h3, .g a' },
+    // Business listing pages
+    { url: 'https://www.crunchbase.com/lists/media-companies/list', name: 'Crunchbase Media', selector: 'a[data-test], .identifier a, h3 a' },
+    { url: 'https://en.wikipedia.org/wiki/List_of_newspapers_in_South_Africa', name: 'Wikipedia SA Newspapers', selector: '#mw-content-text a[title]' },
+    { url: 'https://en.wikipedia.org/wiki/List_of_newspapers_in_Kenya', name: 'Wikipedia Kenya Newspapers', selector: '#mw-content-text a[title]' },
+    { url: 'https://en.wikipedia.org/wiki/List_of_newspapers_in_Nigeria', name: 'Wikipedia Nigeria Newspapers', selector: '#mw-content-text a[title]' },
+    { url: 'https://en.wikipedia.org/wiki/List_of_newspapers_in_Zimbabwe', name: 'Wikipedia Zimbabwe Newspapers', selector: '#mw-content-text a[title]' },
+    // Media conference attendee lists
+    { url: 'https://www.journalismfestival.com/', name: 'Perugia Journalism Festival', selector: 'article a, h3 a' },
+    { url: 'https://newsrewired.com/', name: 'News:Rewired', selector: 'article a, h3 a' },
+  ],
+  legal: [
+    { url: 'https://www.google.com/search?q=law+firms+adopting+AI+legal+tech+2025+2026&num=20', name: 'Google: Law Firms + AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=South+African+law+firms+technology+innovation&num=20', name: 'Google: SA Law Firms Tech', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=UK+law+firms+AI+policy+adoption&num=20', name: 'Google: UK Law Firms AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=legal+aid+organisations+access+to+justice+AI&num=20', name: 'Google: Legal Aid + AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=law+societies+AI+training+requirements&num=20', name: 'Google: Law Societies AI Training', selector: 'a h3, .g a' },
+    { url: 'https://en.wikipedia.org/wiki/List_of_largest_law_firms_by_revenue', name: 'Wikipedia Top Law Firms', selector: '#mw-content-text a[title]' },
+    { url: 'https://www.legal500.com/rankings/', name: 'Legal 500', selector: 'article a, h3 a, li a' },
+    { url: 'https://chambers.com/guides', name: 'Chambers & Partners', selector: 'article a, h3 a' },
+  ],
+  general: [
+    // Companies that need AI training across sectors
+    { url: 'https://www.google.com/search?q=organisations+need+AI+training+ethical+AI+policy&num=20', name: 'Google: Orgs Need AI Training', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=AI+ethics+training+corporate+programmes+2025+2026&num=20', name: 'Google: AI Ethics Training', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=NGOs+AI+implementation+digital+transformation+Africa&num=20', name: 'Google: NGOs AI Africa', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=human+rights+organisations+AI+governance+policy&num=20', name: 'Google: HR Orgs + AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=professional+associations+AI+upskilling+training&num=20', name: 'Google: Prof Associations AI', selector: 'a h3, .g a' },
+    { url: 'https://www.google.com/search?q=foundations+funding+AI+training+media+legal&num=20', name: 'Google: Foundations AI Funding', selector: 'a h3, .g a' },
+    // Tech conference speaker lists (decision-makers)
+    { url: 'https://www.google.com/search?q=AI+for+good+conference+speakers+organisations+2026&num=20', name: 'Google: AI for Good Speakers', selector: 'a h3, .g a' },
+  ],
+};
+
+// Expanded company search — casts a wider net than directory scraping
+export async function searchForCompanies(sectorName) {
+  const sectorKey = sectorName?.toLowerCase() || 'general';
+  const sources = [...(COMPANY_SEARCH_SOURCES[sectorKey] || []), ...COMPANY_SEARCH_SOURCES.general];
+  const allItems = [];
+  let sourcesScanned = 0;
+
+  console.log(`[CompanySearch] Searching ${sources.length} sources for ${sectorName || 'all sectors'}...`);
+
+  const batches = [];
+  for (let i = 0; i < sources.length; i += 3) {
+    batches.push(sources.slice(i, i + 3));
+  }
+
+  for (const batch of batches) {
+    const results = await Promise.allSettled(batch.map(async (source) => {
+      const { data } = await axios.get(source.url, {
+        timeout: 12000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        maxRedirects: 3,
+      });
+      const $ = cheerio.load(data);
+      const items = [];
+
+      $(source.selector || 'a h3, article a, h3 a').each((i, el) => {
+        if (i >= 20) return false;
+        const text = $(el).text().trim();
+        const href = $(el).attr('href') || $(el).closest('a').attr('href');
+        if (text && text.length > 3 && text.length < 200) {
+          const fullUrl = href && href.startsWith('http') ? href : null;
+          items.push({ name: text, url: fullUrl, source: source.name, sourceType: source.type || 'search' });
+        }
+      });
+
+      return { source: source.name, count: items.length, items };
+    }));
+
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        allItems.push(...r.value.items);
+        sourcesScanned++;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 1000)); // respectful pause between batches
+  }
+
+  console.log(`[CompanySearch] Scanned ${sourcesScanned} sources, found ${allItems.length} raw items`);
+
+  // Deduplicate
+  const seen = new Set();
+  const unique = allItems.filter(o => {
+    const key = o.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (key.length < 4 || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  if (unique.length === 0) return [];
+
+  // Claude classifies which are real companies worth pursuing
+  try {
+    const { callClaude } = await import('./claude.js');
+    const orgList = unique.slice(0, 200).map((o, i) => `${i+1}. "${o.name}" (from ${o.source})`).join('\n');
+
+    const result = await callClaude({
+      system: `You identify potential client organisations for Develop AI, which sells AI training courses, ethical AI policies, AI legal frameworks, and AI security protocols.
+
+From these scraped search results, extract REAL ORGANISATIONS that might buy AI training. These could be:
+- Media companies, newsrooms, publishers (any size, any country)
+- Law firms, legal associations, bar councils
+- NGOs, foundations, development organisations
+- Government departments dealing with digital/tech
+- Professional associations in any sector
+- Corporate companies exploring AI adoption
+- Universities with journalism or law programmes
+
+IGNORE: article titles, blog post headings, product names, generic phrases, search engine text.
+
+For each real org, assess:
+- sector: media / legal / ngo / government / corporate / academic / foundation
+- potential: high (clearly needs AI training) / medium (could benefit) / low (tangential)
+- region: if identifiable from context
+
+Return JSON: [{"num": 1, "sector": "media", "potential": "high", "region": "South Africa"}]`,
+      userContent: `Classify these ${unique.length} items for ${sectorName || 'all sector'} lead potential:\n\n${orgList}`,
+      maxTokens: 3000,
+      temperature: 0.1,
+    });
+
+    const jsonMatch = result.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const classified = JSON.parse(jsonMatch[0]);
+      return classified
+        .filter(c => c.num > 0 && c.num <= unique.length)
+        .map(c => ({
+          ...unique[c.num - 1],
+          sector: c.sector,
+          potential: c.potential,
+          region: c.region || 'Unknown',
+          warmth: c.potential === 'high' ? 'hot' : c.potential === 'medium' ? 'warm' : 'cold',
+        }));
+    }
+  } catch (e) {
+    console.log(`[CompanySearch] Claude classification failed: ${e.message}`);
+  }
+
+  return unique.slice(0, 30).map(o => ({ ...o, warmth: 'cold', potential: 'unknown' }));
+}
