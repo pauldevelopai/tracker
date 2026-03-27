@@ -920,19 +920,27 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
       const firstName = nameParts[0] || lead.email.split('@')[0];
       const lastName = nameParts.slice(1).join(' ') || '';
 
-      await pool.query(
-        `INSERT INTO contacts (sector_id, first_name, last_name, email, pipeline_stage, source, tags, notes)
-         VALUES ($1, $2, $3, $4, 'prospect', 'email_mining', $5, $6)
-         ON CONFLICT DO NOTHING`,
-        [
-          sectorId, firstName, lastName, lead.email,
-          JSON.stringify([lead.warmth || 'cold', 'auto-discovered']),
-          `Auto-discovered by Lead Miner.\nWarmth: ${lead.warmth}\nOrg type: ${lead.org_type || 'unknown'}\nReason: ${lead.reason || ''}`
-        ]
-      );
-      itemsProcessed++;
-      knownEmails.add(lead.email.toLowerCase());
-      results.push(`Lead: ${lead.name} <${lead.email}> [${lead.warmth}] — ${lead.reason || ''}`);
+      try {
+        // Check if email already exists (no unique constraint on contacts.email)
+        const { rows: dupes } = await pool.query('SELECT id FROM contacts WHERE LOWER(email) = $1', [lead.email.toLowerCase()]);
+        if (dupes.length > 0) { console.log(`[LeadMiner] Skip dupe: ${lead.email}`); continue; }
+
+        await pool.query(
+          `INSERT INTO contacts (sector_id, first_name, last_name, email, pipeline_stage, source, tags, notes)
+           VALUES ($1, $2, $3, $4, 'prospect', 'email_mining', $5, $6)`,
+          [
+            sectorId, firstName, lastName, lead.email,
+            `{${(lead.warmth || 'cold')},auto-discovered}`,
+            `Auto-discovered by Lead Miner.\nWarmth: ${lead.warmth}\nOrg type: ${lead.org_type || 'unknown'}\nReason: ${lead.reason || ''}`
+          ]
+        );
+        itemsProcessed++;
+        knownEmails.add(lead.email.toLowerCase());
+        console.log(`[LeadMiner] Added: ${lead.name} <${lead.email}> [${lead.warmth}]`);
+        results.push(`Lead: ${lead.name} <${lead.email}> [${lead.warmth}] — ${lead.reason || ''}`);
+      } catch (insertErr) {
+        console.log(`[LeadMiner] Insert error for ${lead.email}: ${insertErr.message}`);
+      }
     }
   } catch (err) {
     results.push(`Claude analysis failed: ${err.message}`);
