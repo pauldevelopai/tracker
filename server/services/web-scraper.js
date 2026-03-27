@@ -65,75 +65,185 @@ export async function scrapeMultiple(urls, concurrency = 3) {
   return results;
 }
 
-// Sector-specific news sources to scrape
+// Sector-specific news sources to scrape (50+ sources)
 const SECTOR_SOURCES = {
   media: [
-    { url: 'https://www.niemanlab.org/', name: 'Nieman Lab', selector: '.article-list a, .river-post a' },
+    // Journalism & media innovation
+    { url: 'https://www.niemanlab.org/', name: 'Nieman Lab', selector: '.article-list a, .river-post a, h2 a' },
     { url: 'https://gijn.org/stories/', name: 'GIJN', selector: '.post-title a, article a' },
     { url: 'https://reutersinstitute.politics.ox.ac.uk/news', name: 'Reuters Institute', selector: 'article a, .views-row a' },
     { url: 'https://www.journalismai.info/blog', name: 'JournalismAI', selector: 'article a, .blog-post a' },
     { url: 'https://www.cjr.org/', name: 'Columbia Journalism Review', selector: 'article a, .lede a' },
+    { url: 'https://www.poynter.org/', name: 'Poynter', selector: 'article a, h3 a, .entry-title a' },
+    { url: 'https://mediashift.org/', name: 'MediaShift', selector: 'article a, h2 a' },
+    { url: 'https://www.digitalnewsreport.org/', name: 'Digital News Report', selector: 'article a, .post a' },
+    { url: 'https://wan-ifra.org/news/', name: 'WAN-IFRA', selector: 'article a, h3 a' },
+    { url: 'https://www.inma.org/blogs/', name: 'INMA', selector: 'article a, h3 a' },
+    // Press freedom & media development
+    { url: 'https://cpj.org/', name: 'CPJ', selector: 'article a, h3 a' },
+    { url: 'https://rsf.org/en/news', name: 'RSF', selector: 'article a, h3 a' },
+    { url: 'https://gfmd.info/news/', name: 'GFMD', selector: 'article a, h3 a' },
+    { url: 'https://www.icfj.org/news', name: 'ICFJ', selector: 'article a, h3 a' },
+    { url: 'https://ijnet.org/en/stories', name: 'IJNet', selector: 'article a, h3 a' },
+    // African media
+    { url: 'https://journalism.co.za/', name: 'Journalism.co.za', selector: 'article a, h2 a' },
+    { url: 'https://www.dailymaverick.co.za/section/opinionistas/', name: 'Daily Maverick', selector: 'article a, h3 a' },
+    { url: 'https://mg.co.za/tag/media/', name: 'Mail & Guardian Media', selector: 'article a, h3 a' },
+    { url: 'https://www.highwayafrica.com/', name: 'Highway Africa', selector: 'article a, h3 a' },
+    // Digital publishing
+    { url: 'https://www.journalism.co.uk/news/', name: 'Journalism.co.uk', selector: 'article a, h3 a' },
+    { url: 'https://www.pressgazette.co.uk/category/media/', name: 'Press Gazette', selector: 'article a, h3 a' },
+    { url: 'https://digiday.com/media/', name: 'Digiday Media', selector: 'article a, h3 a' },
   ],
   legal: [
+    // Legal tech & AI in law
     { url: 'https://www.artificiallawyer.com/', name: 'Artificial Lawyer', selector: 'article a, .entry-title a' },
     { url: 'https://www.law.com/legaltechnews/', name: 'Legal Tech News', selector: 'article a, .headline a' },
+    { url: 'https://www.lawsitesblog.com/', name: 'LawSites', selector: 'article a, h2 a' },
+    { url: 'https://www.legalitprofessionals.com/', name: 'Legal IT Professionals', selector: 'article a, h3 a' },
+    { url: 'https://www.legaltechnology.com/', name: 'Legal Technology', selector: 'article a, h3 a' },
+    { url: 'https://www.lawtechnologytoday.org/', name: 'Law Technology Today', selector: 'article a, h3 a' },
+    // Legal regulation & policy
+    { url: 'https://www.lawgazette.co.uk/practice/technology/', name: 'Law Gazette Tech', selector: 'article a, h3 a' },
+    { url: 'https://www.americanbar.org/groups/centers_commissions/center-for-innovation/', name: 'ABA Innovation', selector: 'article a, h3 a' },
+    { url: 'https://legal-tech-blog.de/', name: 'Legal Tech Blog', selector: 'article a, h2 a' },
   ],
   general_ai: [
+    // Major AI news
     { url: 'https://www.technologyreview.com/topic/artificial-intelligence/', name: 'MIT Tech Review', selector: 'article a' },
+    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI', selector: 'article a, h2 a' },
+    { url: 'https://techcrunch.com/category/artificial-intelligence/', name: 'TechCrunch AI', selector: 'article a, h3 a' },
+    { url: 'https://www.wired.com/tag/artificial-intelligence/', name: 'WIRED AI', selector: 'article a, h3 a' },
+    { url: 'https://venturebeat.com/category/ai/', name: 'VentureBeat AI', selector: 'article a, h3 a' },
+    // AI ethics & policy
     { url: 'https://aiethicist.org/', name: 'AI Ethicist', selector: 'article a, .post-title a' },
+    { url: 'https://www.fast.ai/', name: 'fast.ai', selector: 'article a, h3 a' },
+    { url: 'https://hai.stanford.edu/news', name: 'Stanford HAI', selector: 'article a, h3 a' },
+    { url: 'https://www.partnershiponai.org/news/', name: 'Partnership on AI', selector: 'article a, h3 a' },
+    { url: 'https://montrealethics.ai/blog/', name: 'Montreal AI Ethics', selector: 'article a, h3 a' },
+    { url: 'https://algorithmwatch.org/en/', name: 'AlgorithmWatch', selector: 'article a, h3 a' },
+    // AI tools & implementation
+    { url: 'https://www.deeplearning.ai/the-batch/', name: 'DeepLearning.AI Batch', selector: 'article a, h3 a' },
+    { url: 'https://huggingface.co/blog', name: 'Hugging Face Blog', selector: 'article a, h3 a' },
+    { url: 'https://openai.com/blog', name: 'OpenAI Blog', selector: 'article a, h3 a' },
+    { url: 'https://www.anthropic.com/news', name: 'Anthropic News', selector: 'article a, h3 a' },
+    { url: 'https://blog.google/technology/ai/', name: 'Google AI Blog', selector: 'article a, h3 a' },
+    // AI regulation
+    { url: 'https://www.adalovelaceinstitute.org/news/', name: 'Ada Lovelace Institute', selector: 'article a, h3 a' },
+    { url: 'https://cdt.org/area-of-focus/privacy-data/', name: 'CDT', selector: 'article a, h3 a' },
+    { url: 'https://www.accessnow.org/news/', name: 'Access Now', selector: 'article a, h3 a' },
   ],
 };
 
 // Scrape latest headlines from sector news sources
+// Phase 1: Quick headline scan across all sources (fast)
+// Phase 2: Claude filters for relevance (cheap)
+// Phase 3: Deep scrape only the worthwhile articles (targeted)
 export async function scrapeSectorNews(sectorName) {
   const sectorKey = sectorName.toLowerCase();
   const sources = [...(SECTOR_SOURCES[sectorKey] || []), ...SECTOR_SOURCES.general_ai];
-  const allArticles = [];
+  const allHeadlines = [];
+  let sourcesScanned = 0;
+  let sourcesFailed = 0;
 
-  for (const source of sources) {
-    try {
+  console.log(`[Scraper] Scanning ${sources.length} sources for ${sectorName}...`);
+
+  // Phase 1: Fast headline scan — 5 concurrent, 4 headlines per source max
+  const batches = [];
+  for (let i = 0; i < sources.length; i += 5) {
+    batches.push(sources.slice(i, i + 5));
+  }
+
+  for (const batch of batches) {
+    const batchResults = await Promise.allSettled(batch.map(async (source) => {
       const { data } = await axios.get(source.url, {
-        timeout: TIMEOUT,
+        timeout: 8000,
         headers: { 'User-Agent': USER_AGENT },
         maxRedirects: 3,
       });
       const $ = cheerio.load(data);
-
-      // Extract headline links
       const links = [];
       $(source.selector || 'article a, h2 a, h3 a').each((i, el) => {
-        if (i >= 8) return false; // Max 8 per source
+        if (i >= 4) return false;
         const href = $(el).attr('href');
         const text = $(el).text().trim();
-        if (href && text && text.length > 15 && !href.includes('#')) {
+        if (href && text && text.length > 15 && text.length < 300 && !href.includes('#') && !href.includes('javascript:')) {
           const fullUrl = href.startsWith('http') ? href : new URL(href, source.url).toString();
           if (!links.find(l => l.url === fullUrl)) {
             links.push({ url: fullUrl, title: text.slice(0, 200), source: source.name });
           }
         }
       });
+      return { source: source.name, links };
+    }));
 
-      allArticles.push(...links);
-      console.log(`[Scraper] ${source.name}: ${links.length} headlines`);
-    } catch (err) {
-      console.log(`[Scraper] ${source.name} failed: ${err.message}`);
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        allHeadlines.push(...result.value.links);
+        sourcesScanned++;
+      } else {
+        sourcesFailed++;
+      }
     }
+    // Brief pause between batches
+    if (batches.indexOf(batch) < batches.length - 1) await new Promise(r => setTimeout(r, 500));
   }
 
-  // Deduplicate by URL
+  console.log(`[Scraper] Scanned ${sourcesScanned}/${sources.length} sources (${sourcesFailed} failed), found ${allHeadlines.length} headlines`);
+
+  // Deduplicate
   const seen = new Set();
-  const unique = allArticles.filter(a => {
-    if (seen.has(a.url)) return false;
-    seen.add(a.url);
+  const unique = allHeadlines.filter(a => {
+    const key = a.url.replace(/[?#].*/, ''); // strip query params for dedup
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
-  // Scrape top articles for full content (max 10)
-  const topArticles = unique.slice(0, 10);
-  const scraped = await scrapeMultiple(topArticles.map(a => a.url), 3);
+  if (unique.length === 0) return [];
 
-  // Merge headline data with scraped content
-  return topArticles.map((article, i) => ({
+  // Phase 2: Quick Claude filter — which headlines are worth deep-scraping?
+  // This is a fast, cheap call — just headline text, no article content
+  const headlineList = unique.slice(0, 100).map((h, i) => `${i+1}. "${h.title}" (${h.source})`).join('\n');
+
+  let worthwhile = unique.slice(0, 15); // fallback: just take first 15
+
+  try {
+    const { callClaude } = await import('./claude.js');
+    const filterResult = await callClaude({
+      system: `You filter news headlines for relevance to AI training, AI ethics, AI policy, AI tools, and journalism/legal tech.
+Given a list of headlines, return ONLY the numbers of headlines that are directly relevant to:
+- AI developments that affect how professionals work
+- AI tools, platforms, or techniques worth knowing about
+- AI regulation, ethics, or policy changes
+- AI in journalism, media, or legal practice
+- Training, education, or skill development related to AI
+
+Ignore: generic business news, entertainment, sports, weather, politics unrelated to AI, social media drama.
+
+Output format: just comma-separated numbers, nothing else. Example: 1,3,5,12,15`,
+      userContent: `Filter these ${sectorName} sector headlines for AI relevance:\n\n${headlineList}`,
+      maxTokens: 200,
+      temperature: 0.1,
+    });
+
+    const selectedNums = filterResult.match(/\d+/g)?.map(n => parseInt(n) - 1) || [];
+    if (selectedNums.length > 0) {
+      worthwhile = selectedNums
+        .filter(n => n >= 0 && n < unique.length)
+        .slice(0, 20)
+        .map(n => unique[n]);
+      console.log(`[Scraper] Claude selected ${worthwhile.length}/${unique.length} headlines as relevant`);
+    }
+  } catch (e) {
+    console.log(`[Scraper] Claude filter failed, using top ${worthwhile.length} headlines: ${e.message}`);
+  }
+
+  // Phase 3: Deep scrape only the worthwhile articles
+  console.log(`[Scraper] Deep-scraping ${worthwhile.length} articles...`);
+  const scraped = await scrapeMultiple(worthwhile.map(a => a.url), 4);
+
+  return worthwhile.map((article, i) => ({
     ...article,
     fullText: scraped[i]?.text?.slice(0, 2000) || '',
     description: scraped[i]?.description || '',
