@@ -822,6 +822,7 @@ export const JOB_REGISTRY = {
   embedding_backfill: runEmbeddingBackfill,
   knowledge_sync: runKnowledgeSync,
   lead_miner: runLeadMiner,
+  web_prospector: runWebProspector,
 };
 
 // Lead Miner — scans Gmail for potential leads and organisations
@@ -987,6 +988,58 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
   }
 
   return { result: results.join('\n') || `Processed ${itemsProcessed} new leads`, itemsProcessed };
+}
+
+// Web Lead Prospector — scrapes directories for new organisations
+export async function runWebProspector() {
+  let itemsProcessed = 0;
+  const results = [];
+
+  try {
+    const { scrapeLeadProspects } = await import('./web-scraper.js');
+
+    // Get existing org names to avoid duplicates
+    const { rows: existingOrgs } = await pool.query('SELECT LOWER(name) AS name FROM organisations');
+    const knownOrgs = new Set(existingOrgs.map(o => o.name));
+
+    // Get active sectors
+    const { rows: sectors } = await pool.query("SELECT id, name FROM sectors WHERE is_active = true");
+
+    for (const sector of sectors) {
+      console.log(`[WebProspector] Scanning directories for ${sector.name}...`);
+      const prospects = await scrapeLeadProspects(sector.name);
+
+      for (const prospect of prospects) {
+        const nameKey = prospect.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (knownOrgs.has(prospect.name.toLowerCase())) continue;
+        if (nameKey.length < 3) continue;
+
+        // Add as prospect organisation
+        try {
+          await pool.query(
+            `INSERT INTO contacts (sector_id, first_name, last_name, pipeline_stage, source, tags, notes)
+             VALUES ($1, $2, '', 'pending_review', 'web_scraping', $3, $4)`,
+            [
+              sector.id,
+              prospect.name.slice(0, 100),
+              `{${prospect.warmth || 'cold'},auto-discovered,web-scraped}`,
+              `Auto-discovered by Web Prospector from ${prospect.source}.\nWarmth: ${prospect.warmth}\nSource URL: ${prospect.url || 'N/A'}\nSource type: ${prospect.sourceType || 'directory'}`
+            ]
+          );
+          itemsProcessed++;
+          knownOrgs.add(prospect.name.toLowerCase());
+          results.push(`[${prospect.warmth}] ${prospect.name} (from ${prospect.source})`);
+        } catch (e) {
+          // Skip duplicates
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[WebProspector] Error:', err.message);
+    results.push(`Error: ${err.message}`);
+  }
+
+  return { result: results.join('\n') || `Discovered ${itemsProcessed} new prospects`, itemsProcessed };
 }
 
 // Advanced Lead Miner with deep scan, custom keywords, and relationship scoring
