@@ -35,6 +35,35 @@ export default function LeadsPage() {
 
   useEffect(load, [selectedSectorId]);
 
+  // Check if a mine is running when page loads (in case user navigated away and came back)
+  useEffect(() => {
+    apiFetch('/background-jobs').then(jobs => {
+      const miner = jobs.find(j => j.name === 'lead_miner');
+      if (miner?.last_status === 'running') {
+        setMining(true);
+        setMineResult('⏳ Lead mining is running in the background... Refresh to see new leads.');
+        // Poll until done
+        const poll = setInterval(async () => {
+          try {
+            const updated = await apiFetch('/background-jobs');
+            const m = updated.find(j => j.name === 'lead_miner');
+            if (m?.last_status !== 'running') {
+              clearInterval(poll);
+              setMining(false);
+              if (m?.last_status === 'success') {
+                setMineResult(`✅ Done — found ${m.last_items_processed || 0} new lead(s).`);
+                load();
+              } else {
+                setMineResult('❌ Mining finished with error.');
+              }
+            }
+          } catch { /* ignore */ }
+        }, 10000);
+        return () => clearInterval(poll);
+      }
+    }).catch(() => {});
+  }, []);
+
   async function runLeadMiner() {
     setMining(true);
     setMineResult('⏳ Lead Miner starting — connecting to Gmail...');

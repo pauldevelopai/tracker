@@ -289,10 +289,16 @@ router.post('/coach/cohort-progress', async (req, res) => {
 router.post('/leads/mine-gmail', async (req, res) => {
   try {
     const { mode, keywords } = req.body; // mode: 'recent' | 'deep', keywords: string
-    // Start async — return immediately
+
+    // Mark as running BEFORE responding
+    await pool.query(
+      `UPDATE background_jobs SET last_status = 'running' WHERE name = 'lead_miner'`
+    );
+
+    // Return immediately — mining continues in background
     res.json({ message: 'Mining started', mode: mode || 'recent' });
 
-    // Import and run
+    // Import and run (this continues after response is sent)
     const { runLeadMinerAdvanced } = await import('../services/background-jobs.js');
     const result = await runLeadMinerAdvanced(mode || 'recent', keywords || '');
 
