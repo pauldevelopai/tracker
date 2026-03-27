@@ -127,6 +127,9 @@ export default function FeedbackList() {
                 >
                   {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
+                {fb.status !== 'done' && (
+                  <button className="btn btn-small" onClick={() => updateStatus(fb.id, 'done')} style={{ fontSize: 11, padding: '2px 8px', background: '#10B981', color: 'white', border: 'none' }}>✓ Done</button>
+                )}
                 <button className="btn btn-danger btn-small" onClick={() => deleteFeedback(fb.id)} style={{ fontSize: 11, padding: '2px 8px' }}>x</button>
               </div>
             </div>

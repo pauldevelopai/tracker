@@ -71,40 +71,50 @@ export async function runContentGenerator() {
   // Get active sectors
   const { rows: sectors } = await pool.query("SELECT id, name FROM sectors WHERE is_active = true");
 
-  for (const sector of sectors) {
-    // Generate 3 social posts per sector
-    const platforms = ['linkedin', 'linkedin', 'twitter'];
-    const days = [1, 3, 5]; // Mon, Wed, Fri
-    const now = new Date();
+  // Generate max 3 social posts total per day, rotating across sectors
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
 
-    // Pull recent intelligence for topic ideas
-    const { rows: recentIntel } = await pool.query(
-      `SELECT title FROM industry_intelligence WHERE (sector_id = $1 OR sector_id IS NULL) AND is_actionable = true ORDER BY created_at DESC LIMIT 5`,
-      [sector.id]
-    );
-    const topicPool = recentIntel.map(r => r.title);
+  // Check how many were already generated today
+  const { rows: [{ count: todayCount }] } = await pool.query(
+    `SELECT count(*)::int AS count FROM social_posts WHERE ai_generated = true AND created_at::date = $1::date`,
+    [today]
+  );
 
-    for (let i = 0; i < platforms.length; i++) {
-      try {
-        const topic = topicPool[i] || `Latest AI developments and practical applications for the ${sector.name} sector`;
-        const content = await draftSocialPost(sector.name, platforms[i], topic);
-        // Calculate next occurrence of the target day
-        const targetDay = days[i];
-        const daysUntil = (targetDay - now.getDay() + 7) % 7 || 7;
-        const scheduledDate = new Date(now);
-        scheduledDate.setDate(now.getDate() + daysUntil);
-        scheduledDate.setHours(9, 0, 0, 0);
+  const remainingSlots = Math.max(0, 3 - parseInt(todayCount));
+  if (remainingSlots === 0) {
+    results.push('Already generated 3 posts today — skipping');
+  }
 
-        await pool.query(
-          `INSERT INTO social_posts (sector_id, platform, content, status, scheduled_for, ai_generated)
-           VALUES ($1, $2, $3, 'draft', $4, true)`,
-          [sector.id, platforms[i], content, scheduledDate]
-        );
-        itemsProcessed++;
-        results.push(`Generated ${platforms[i]} post for ${sector.name} (scheduled ${scheduledDate.toLocaleDateString()})`);
-      } catch (err) {
-        results.push(`Failed to generate post for ${sector.name}: ${err.message}`);
-      }
+  // Collect topic ideas from recent intelligence across all sectors
+  const { rows: recentIntel } = await pool.query(
+    `SELECT title, sector_id FROM industry_intelligence WHERE is_actionable = true ORDER BY created_at DESC LIMIT 10`
+  );
+
+  const platforms = ['linkedin', 'linkedin', 'twitter'];
+  let postsMade = 0;
+
+  for (let i = 0; i < remainingSlots && i < platforms.length; i++) {
+    // Alternate sectors
+    const sector = sectors[i % sectors.length];
+    try {
+      const topic = recentIntel[i]?.title || `Latest AI developments and practical applications for the ${sector.name} sector`;
+      const content = await draftSocialPost(sector.name, platforms[i], topic);
+
+      // Schedule for today at 9am
+      const scheduledDate = new Date(now);
+      scheduledDate.setHours(9, 0, 0, 0);
+
+      await pool.query(
+        `INSERT INTO social_posts (sector_id, platform, content, status, scheduled_for, ai_generated)
+         VALUES ($1, $2, $3, 'draft', $4, true)`,
+        [sector.id, platforms[i], content, scheduledDate]
+      );
+      postsMade++;
+      itemsProcessed++;
+      results.push(`Generated ${platforms[i]} post for ${sector.name} (${today})`);
+    } catch (err) {
+      results.push(`Failed to generate post for ${sector.name}: ${err.message}`);
     }
   }
 
