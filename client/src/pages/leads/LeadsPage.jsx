@@ -100,6 +100,28 @@ export default function LeadsPage() {
         <div style={{ marginBottom: 16, padding: 10, background: '#F1F5F9', borderRadius: 6, fontSize: 13 }}>{mineResult}</div>
       )}
 
+      {/* Lead Miner info card */}
+      <div className="card" style={{ marginBottom: 20, padding: 16, background: '#F8FAFC', border: '1px solid var(--border-color)', display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>🔍 Lead Miner</span>
+            <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, background: '#6366F1', color: 'white' }}>AI Agent</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Scans your Gmail for conversations about journalism, media, legal, AI, and training.
+            Filters out newsletters and known contacts. Claude classifies each new contact by sector and warmth (hot/warm/cold)
+            and adds qualified leads here as prospects.
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
+            Runs automatically <strong>Mon & Thu at 8am</strong> · or click <strong>Mine Gmail for Leads</strong> above to run now
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', minWidth: 80 }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)' }}>{contacts.filter(c => c.source === 'email_mining').length}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Mined leads</div>
+        </div>
+      </div>
+
       {/* Pipeline summary bar */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderRadius: 8, overflow: 'hidden' }}>
         {PIPELINE_STAGES.map(stage => (
