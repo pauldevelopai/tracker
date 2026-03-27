@@ -21,6 +21,8 @@ export default function LeadsPage() {
   const [stageFilter, setStageFilter] = useState('');
   const [mining, setMining] = useState(false);
   const [mineResult, setMineResult] = useState('');
+  const [mineMode, setMineMode] = useState('recent'); // 'recent' or 'deep'
+  const [customKeywords, setCustomKeywords] = useState('');
 
   function load() {
     apiFetch(buildUrl('/contacts', selectedSectorId)).then(data => {
@@ -35,27 +37,33 @@ export default function LeadsPage() {
     setMining(true);
     setMineResult('⏳ Lead Miner starting — connecting to Gmail...');
     try {
-      await apiFetch('/background-jobs/lead_miner/run', { method: 'POST' });
-      setMineResult('⏳ Scanning your Gmail for potential leads... (this takes 1-2 minutes)');
+      await apiFetch('/agent-actions/leads/mine-gmail', {
+        method: 'POST',
+        body: JSON.stringify({ mode: mineMode, keywords: customKeywords }),
+      });
+      setMineResult(mineMode === 'deep'
+        ? '⏳ Deep scan started — going through ALL your Gmail history. This will take 2-5 minutes...'
+        : '⏳ Scanning recent Gmail for leads... (1-2 minutes)');
 
       // Poll for completion
       let attempts = 0;
+      const maxAttempts = mineMode === 'deep' ? 30 : 15;
       const pollInterval = setInterval(async () => {
         attempts++;
         try {
           const jobData = await apiFetch('/background-jobs');
           const minerJob = jobData.find(j => j.name === 'lead_miner');
-          if (minerJob) {
-            if (minerJob.last_status === 'success' && minerJob.last_run_at && (Date.now() - new Date(minerJob.last_run_at).getTime()) < 120000) {
+          if (minerJob?.last_run_at && (Date.now() - new Date(minerJob.last_run_at).getTime()) < 300000) {
+            if (minerJob.last_status === 'success') {
               clearInterval(pollInterval);
               const items = minerJob.last_items_processed || 0;
               setMineResult(items > 0
                 ? `✅ Done — found ${items} new lead${items > 1 ? 's' : ''}. They've been added to the pipeline below.`
-                : '✅ Done — no new leads found this time. All contacts in your recent emails are already known.');
+                : '✅ Done — no new leads found this time. All contacts in your emails are already known.');
               setMining(false);
               load();
               return;
-            } else if (minerJob.last_status === 'error' && (Date.now() - new Date(minerJob.last_run_at).getTime()) < 120000) {
+            } else if (minerJob.last_status === 'error') {
               clearInterval(pollInterval);
               setMineResult('❌ Mining failed: ' + (minerJob.last_error || 'Unknown error'));
               setMining(false);
@@ -64,16 +72,15 @@ export default function LeadsPage() {
           }
         } catch (e) { /* ignore poll errors */ }
 
-        // Update progress message
         if (attempts <= 3) setMineResult('⏳ Searching Gmail... (checking journalism, media, legal, AI conversations)');
-        else if (attempts <= 6) setMineResult('⏳ Found contacts, asking Claude to classify them...');
-        else if (attempts <= 12) setMineResult('⏳ Claude is analysing contacts... almost done');
+        else if (attempts <= 8) setMineResult(`⏳ Found contacts, asking Claude to classify and score them... (${attempts * 10}s)`);
+        else if (attempts <= maxAttempts) setMineResult(`⏳ Claude is analysing depth of relationships and seniority... (${attempts * 10}s)`);
         else {
           clearInterval(pollInterval);
           setMineResult('⏳ Still running in background. Refresh the page in a minute to see results.');
           setMining(false);
         }
-      }, 10000); // Poll every 10s
+      }, 10000);
     } catch (err) {
       setMineResult('❌ Mining failed: ' + err.message);
       setMining(false);
@@ -107,12 +114,18 @@ export default function LeadsPage() {
     { key: 'source', label: 'Source', render: row => (
       <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{row.source === 'email_mining' ? '📧 Email' : row.source || '—'}</span>
     )},
-    { key: 'tags', label: 'Warmth', render: row => {
+    { key: 'tags', label: 'Tags', render: row => {
       const tags = row.tags || [];
       const warmth = tags.find(t => ['hot', 'warm', 'cold'].includes(t));
-      if (!warmth) return '—';
-      const colors = { hot: '#EF4444', warm: '#F59E0B', cold: '#94A3B8' };
-      return <span style={{ fontSize: 11, fontWeight: 600, color: colors[warmth] }}>{warmth.toUpperCase()}</span>;
+      const warmColors = { hot: '#EF4444', warm: '#F59E0B', cold: '#94A3B8' };
+      return (
+        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+          {warmth && <span style={{ fontSize: 10, fontWeight: 600, color: warmColors[warmth], padding: '1px 5px', borderRadius: 8, background: warmColors[warmth] + '18' }}>{warmth.toUpperCase()}</span>}
+          {tags.includes('senior') && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 8, background: '#6366F122', color: '#6366F1' }}>Senior</span>}
+          {tags.includes('high-influence') && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 8, background: '#10B98122', color: '#10B981' }}>High Influence</span>}
+          {tags.includes('deep-relationship') && <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 8, background: '#F59E0B22', color: '#F59E0B' }}>Deep</span>}
+        </div>
+      );
     }},
     { key: 'last_contacted_at', label: 'Last Contact', render: row => row.last_contacted_at ? new Date(row.last_contacted_at).toLocaleDateString() : '—' },
   ];
@@ -132,25 +145,47 @@ export default function LeadsPage() {
         <div style={{ marginBottom: 16, padding: 10, background: '#F1F5F9', borderRadius: 6, fontSize: 13 }}>{mineResult}</div>
       )}
 
-      {/* Lead Miner info card */}
-      <div className="card" style={{ marginBottom: 20, padding: 16, background: '#F8FAFC', border: '1px solid var(--border-color)', display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>🔍 Lead Miner</span>
+      {/* Lead Miner controls */}
+      <div className="card" style={{ marginBottom: 20, padding: 20, borderLeft: '4px solid #6366F1' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>🔍 Lead Miner</span>
             <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, background: '#6366F1', color: 'white' }}>AI Agent</span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Scans your Gmail for conversations about journalism, media, legal, AI, and training.
-            Filters out newsletters and known contacts. Claude classifies each new contact by sector and warmth (hot/warm/cold)
-            and adds qualified leads here as prospects.
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
-            Runs automatically <strong>Mon & Thu at 8am</strong> · or click <strong>Mine Gmail for Leads</strong> above to run now
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)' }}>{contacts.filter(c => c.source === 'email_mining').length}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Mined leads</div>
           </div>
         </div>
-        <div style={{ textAlign: 'center', minWidth: 80 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--accent)' }}>{contacts.filter(c => c.source === 'email_mining').length}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Mined leads</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 14 }}>
+          Scans Gmail for people you've corresponded with about journalism, media, legal, AI, and training.
+          Claude scores each contact by relationship depth, seniority, and influence.
+          Runs automatically Mon & Thu 8am.
+        </div>
+
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button onClick={() => setMineMode('recent')}
+            className={`btn btn-small ${mineMode === 'recent' ? 'btn-primary' : 'btn-secondary'}`}>
+            Recent (last 90 days)
+          </button>
+          <button onClick={() => setMineMode('deep')}
+            className={`btn btn-small ${mineMode === 'deep' ? 'btn-primary' : 'btn-secondary'}`}>
+            Deep Scan (all time)
+          </button>
+        </div>
+
+        {/* Custom keywords */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            value={customKeywords}
+            onChange={e => setCustomKeywords(e.target.value)}
+            placeholder="Add keywords to search (e.g. 'foundation', 'newsroom director', 'grant')..."
+            style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13 }}
+          />
+          <button className="btn btn-primary" onClick={runLeadMiner} disabled={mining}>
+            {mining ? 'Mining...' : '🔍 Mine Now'}
+          </button>
         </div>
       </div>
 

@@ -949,6 +949,199 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
   return { result: results.join('\n') || `Processed ${itemsProcessed} new leads`, itemsProcessed };
 }
 
+// Advanced Lead Miner with deep scan, custom keywords, and relationship scoring
+export async function runLeadMinerAdvanced(mode = 'recent', customKeywords = '') {
+  let itemsProcessed = 0;
+  const results = [];
+
+  const connected = await getConnectionStatus();
+  if (!connected) return { result: 'Gmail not connected', itemsProcessed: 0 };
+
+  // Get existing contacts to avoid dupes
+  const { rows: existingEmails } = await pool.query('SELECT LOWER(email) AS email FROM contacts WHERE email IS NOT NULL');
+  const knownEmails = new Set(existingEmails.map(e => e.email));
+
+  const timeRange = mode === 'deep' ? '' : 'newer_than:90d';
+  const maxPerSearch = mode === 'deep' ? 100 : 30;
+
+  // Build search queries
+  const baseFilters = 'from:(-noreply -no-reply -notification -newsletter -substack -beehiiv -ghost -mailchimp -sendgrid -postmaster -mailer-daemon)';
+  let searches = [
+    `${baseFilters} subject:(journalism OR newsroom OR editor OR reporter) ${timeRange}`,
+    `${baseFilters} subject:(media OR broadcasting OR publishing OR newspaper) ${timeRange}`,
+    `${baseFilters} subject:(legal OR law firm OR law society OR attorney) ${timeRange}`,
+    `${baseFilters} subject:(training OR workshop OR programme OR cohort OR curriculum) ${timeRange}`,
+    `${baseFilters} subject:(AI OR "artificial intelligence" OR "machine learning") ${timeRange}`,
+    `${baseFilters} subject:(grant OR funding OR proposal OR foundation OR donor) ${timeRange}`,
+    `${baseFilters} subject:(policy OR ethics OR governance OR framework OR compliance) ${timeRange}`,
+  ];
+
+  // Add custom keyword searches
+  if (customKeywords.trim()) {
+    const keywords = customKeywords.split(',').map(k => k.trim()).filter(Boolean);
+    for (const kw of keywords) {
+      searches.push(`${baseFilters} (${kw}) ${timeRange}`);
+    }
+  }
+
+  const discoveredContacts = new Map(); // email → {name, email, subjects[], messageCount}
+
+  for (const query of searches) {
+    try {
+      const messages = await searchEmails(query, maxPerSearch);
+      console.log(`[LeadMiner] Search "${query.slice(0, 60)}..." → ${messages.length} messages`);
+
+      for (const msg of messages) {
+        try {
+          const email = await readEmail(msg.id);
+          if (!email) continue;
+
+          const fromHeader = email.from || '';
+          let senderName, senderEmail;
+
+          const fullMatch = fromHeader.match(/^"?([^"<]+)"?\s*<([^>]+)>/);
+          if (fullMatch) {
+            senderName = fullMatch[1].trim();
+            senderEmail = fullMatch[2].trim().toLowerCase();
+          } else {
+            const simpleMatch = fromHeader.match(/([\w.+-]+@[\w.-]+\.\w+)/);
+            if (!simpleMatch) continue;
+            senderEmail = simpleMatch[1].toLowerCase();
+            senderName = fromHeader.replace(/<.*>/, '').trim() || senderEmail.split('@')[0];
+          }
+
+          // Skip unwanted
+          if (knownEmails.has(senderEmail)) continue;
+          if (senderEmail.includes('noreply') || senderEmail.includes('no-reply') || senderEmail.includes('notification')) continue;
+          if (senderEmail.includes('paul@developai') || senderEmail.includes('paulmcnally')) continue;
+
+          // Accumulate — track how many emails from this person and what subjects
+          if (discoveredContacts.has(senderEmail)) {
+            const existing = discoveredContacts.get(senderEmail);
+            existing.messageCount++;
+            if (email.subject && !existing.subjects.includes(email.subject)) {
+              existing.subjects.push(email.subject);
+            }
+          } else {
+            discoveredContacts.set(senderEmail, {
+              name: senderName,
+              email: senderEmail,
+              subjects: email.subject ? [email.subject] : [],
+              messageCount: 1,
+              date: email.date || '',
+            });
+          }
+        } catch (e) { /* skip */ }
+      }
+    } catch (e) {
+      console.log(`[LeadMiner] Search failed: ${e.message}`);
+    }
+  }
+
+  console.log(`[LeadMiner] Discovered ${discoveredContacts.size} unique contacts`);
+  if (discoveredContacts.size === 0) {
+    return { result: 'No new potential leads found', itemsProcessed: 0 };
+  }
+
+  // Prepare for Claude — include message count for relationship depth
+  const contactList = Array.from(discoveredContacts.values())
+    .sort((a, b) => b.messageCount - a.messageCount) // most active first
+    .slice(0, 60)
+    .map((c, i) => `${i+1}. ${c.name} <${c.email}> — ${c.messageCount} emails — Subjects: ${c.subjects.slice(0, 3).join('; ')}`)
+    .join('\n');
+
+  const { rows: sectors } = await pool.query("SELECT name FROM sectors WHERE is_active = true");
+  const sectorNames = sectors.map(s => s.name).join(', ');
+
+  try {
+    const analysis = await callClaudeRaw({
+      system: `You are a business development analyst for Develop AI, which provides AI training, ethical AI policies, AI legal frameworks, and AI security protocols for organisations in these sectors: ${sectorNames}.
+
+Analyse these email contacts. For each person, assess:
+
+1. **is_lead** (true/false): Could they become a client or introduce us to clients?
+2. **sector**: ${sectorNames} / cross-sector / unknown
+3. **org_type**: newsroom, law firm, NGO, foundation, government, academic, media company, tech company, consultancy, other
+4. **relationship_depth**: deep (multiple emails, ongoing conversation), moderate (a few exchanges), surface (one-off or CC'd)
+5. **seniority**: senior (director, editor-in-chief, head of, CEO, managing partner), mid (manager, editor, programme lead), junior (assistant, intern, coordinator), unknown
+6. **influence**: high (decision-maker, budget holder, network connector), medium (can recommend/refer), low (individual contributor)
+7. **warmth**: hot (active conversation about services/training), warm (related topic discussed), cold (just a contact)
+8. **score** (1-100): Overall lead quality combining all factors
+9. **reason**: One-line explanation
+
+Note: someone with many emails = deeper relationship. Senior people at media orgs, law societies, foundations, and journalism networks are highest value.
+
+Output as JSON array: [{"email":"...","name":"...","is_lead":true/false,"sector":"...","org_type":"...","relationship_depth":"...","seniority":"...","influence":"...","warmth":"...","score":85,"reason":"..."}]
+
+Only include contacts where is_lead is true and score >= 40.`,
+      userContent: `Contacts discovered from ${mode === 'deep' ? 'ALL' : 'recent'} email history:\n\n${contactList}`,
+      maxTokens: 4000,
+      temperature: 0.2,
+    });
+
+    console.log(`[LeadMiner] Claude response length: ${analysis.length} chars`);
+    let leads = [];
+    try {
+      const jsonMatch = analysis.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        leads = JSON.parse(jsonMatch[0]);
+        console.log(`[LeadMiner] Claude classified ${leads.length} leads (${leads.filter(l => l.is_lead).length} qualified)`);
+      } else {
+        console.log(`[LeadMiner] No JSON found. First 200: ${analysis.slice(0, 200)}`);
+      }
+    } catch (e) {
+      console.log(`[LeadMiner] JSON parse error: ${e.message}`);
+    }
+
+    // Get sector IDs
+    const { rows: sectorRows } = await pool.query('SELECT id, name FROM sectors');
+    const sectorMap = {};
+    sectorRows.forEach(s => { sectorMap[s.name.toLowerCase()] = s.id; });
+
+    console.log(`[LeadMiner] Processing ${leads.length} classified contacts...`);
+    for (const lead of leads) {
+      if (!lead.is_lead || !lead.email) continue;
+      if (knownEmails.has(lead.email.toLowerCase())) continue;
+
+      const sectorId = sectorMap[lead.sector?.toLowerCase()] || sectorRows[0]?.id;
+      const nameParts = (lead.name || '').split(' ');
+      const firstName = nameParts[0] || lead.email.split('@')[0];
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      try {
+        const { rows: dupes } = await pool.query('SELECT id FROM contacts WHERE LOWER(email) = $1', [lead.email.toLowerCase()]);
+        if (dupes.length > 0) continue;
+
+        const tags = [lead.warmth || 'cold', 'auto-discovered'];
+        if (lead.seniority === 'senior') tags.push('senior');
+        if (lead.influence === 'high') tags.push('high-influence');
+        if (lead.relationship_depth === 'deep') tags.push('deep-relationship');
+
+        await pool.query(
+          `INSERT INTO contacts (sector_id, first_name, last_name, email, pipeline_stage, source, tags, notes)
+           VALUES ($1, $2, $3, $4, 'prospect', 'email_mining', $5, $6)`,
+          [
+            sectorId, firstName, lastName, lead.email,
+            `{${tags.join(',')}}`,
+            `Auto-discovered by Lead Miner (score: ${lead.score || '?'}/100)\nRelationship: ${lead.relationship_depth || '?'} · Seniority: ${lead.seniority || '?'} · Influence: ${lead.influence || '?'}\nOrg type: ${lead.org_type || '?'}\nReason: ${lead.reason || ''}`
+          ]
+        );
+        itemsProcessed++;
+        knownEmails.add(lead.email.toLowerCase());
+        console.log(`[LeadMiner] Added: ${lead.name} <${lead.email}> [score:${lead.score}] [${lead.warmth}/${lead.seniority}/${lead.influence}]`);
+        results.push(`${lead.name} <${lead.email}> — score:${lead.score} ${lead.warmth}/${lead.seniority}/${lead.influence}`);
+      } catch (insertErr) {
+        console.log(`[LeadMiner] Insert error: ${insertErr.message}`);
+      }
+    }
+  } catch (err) {
+    console.log(`[LeadMiner] Claude failed: ${err.message}`);
+    results.push(`Claude analysis failed: ${err.message}`);
+  }
+
+  return { result: results.join('\n') || `Processed ${itemsProcessed} new leads`, itemsProcessed };
+}
+
 // Raw Claude call without knowledge enrichment (for lead classification)
 async function callClaudeRaw(params) {
   const { callClaude } = await import('./claude.js');

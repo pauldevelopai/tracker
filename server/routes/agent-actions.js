@@ -285,4 +285,37 @@ router.post('/coach/cohort-progress', async (req, res) => {
   }
 });
 
+// Lead Miner — mine Gmail with options
+router.post('/leads/mine-gmail', async (req, res) => {
+  try {
+    const { mode, keywords } = req.body; // mode: 'recent' | 'deep', keywords: string
+    // Start async — return immediately
+    res.json({ message: 'Mining started', mode: mode || 'recent' });
+
+    // Import and run
+    const { runLeadMinerAdvanced } = await import('../services/background-jobs.js');
+    const result = await runLeadMinerAdvanced(mode || 'recent', keywords || '');
+
+    // Update job record
+    await pool.query(
+      `UPDATE background_jobs SET last_run_at = NOW(), last_status = 'success', last_items_processed = $1 WHERE name = 'lead_miner'`,
+      [result.itemsProcessed]
+    );
+
+    // Create notification
+    if (result.itemsProcessed > 0) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, type, title, body) VALUES ($1, 'lead_miner', $2, $3)`,
+        [req.user.id, `Lead Miner found ${result.itemsProcessed} new leads`, result.result?.slice(0, 500)]
+      );
+    }
+  } catch (err) {
+    console.error('Lead mine error:', err);
+    await pool.query(
+      `UPDATE background_jobs SET last_run_at = NOW(), last_status = 'error', last_error = $1 WHERE name = 'lead_miner'`,
+      [err.message]
+    ).catch(() => {});
+  }
+});
+
 export default router;
