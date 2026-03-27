@@ -8,6 +8,7 @@ import CourseForm from './CourseForm.jsx';
 import DocumentUpload from '../../components/DocumentUpload.jsx';
 import ModuleForm from './ModuleForm.jsx';
 import AIResearchPanel from './AIResearchPanel.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const STATUS_LABELS = { draft: 'Draft', active: 'Active', archived: 'Archived' };
 
@@ -246,6 +247,8 @@ export default function CourseDetail() {
       )}
       {addingModule && <ModuleForm courseId={id} onClose={() => setAddingModule(false)} onSaved={() => { setAddingModule(false); loadModules(); }} />}
       {editingModule && <ModuleForm module={editingModule} courseId={id} onClose={() => setEditingModule(null)} onSaved={() => { setEditingModule(null); loadModules(); }} />}
+
+      <SmartInput entityType="course" entityId={id} sectorId={course.sector_id} onUpdated={() => loadCourse()} />
     </div>
   );
 }

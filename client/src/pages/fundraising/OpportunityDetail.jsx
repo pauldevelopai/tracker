@@ -5,6 +5,7 @@ import { apiFetch } from '../../hooks/useApi.js';
 import SectorBadge from '../../components/SectorBadge.jsx';
 import Modal from '../../components/Modal.jsx';
 import OpportunityForm from './OpportunityForm.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const STAGE_LABELS = { identified: 'Identified', qualified: 'Qualified', applying: 'Applying', submitted: 'Submitted', decision: 'Decision', won: 'Won', lost: 'Lost' };
 const APP_STATUSES = ['drafting', 'internal_review', 'submitted', 'shortlisted', 'awarded', 'rejected'];
@@ -286,6 +287,8 @@ export default function OpportunityDetail() {
       )}
       {editingBudget && <BudgetEditor budget={app?.budget_breakdown || []} onSave={updateBudget} onClose={() => setEditingBudget(false)} />}
       {addingReport && <ReportFormModal onSave={createReport} onClose={() => setAddingReport(false)} />}
+
+      <SmartInput entityType="opportunity" entityId={id} sectorId={opp.sector_id} onUpdated={() => loadOpp()} />
     </div>
   );
 }

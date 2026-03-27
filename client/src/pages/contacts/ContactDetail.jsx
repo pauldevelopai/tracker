@@ -5,6 +5,7 @@ import { apiFetch } from '../../hooks/useApi.js';
 import SectorBadge from '../../components/SectorBadge.jsx';
 import ContactForm from './ContactForm.jsx';
 import Modal from '../../components/Modal.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const STAGE_LABELS = {
   pending_review: 'Pending Review', prospect: 'Prospect', contacted: 'Contacted',
@@ -227,6 +228,8 @@ export default function ContactDetail() {
           </div>
         </Modal>
       )}
+
+      <SmartInput entityType="contact" entityId={id} sectorId={contact.sector_id} onUpdated={() => load()} />
     </div>
   );
 }

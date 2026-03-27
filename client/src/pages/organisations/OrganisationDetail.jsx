@@ -7,6 +7,7 @@ import DataTable from '../../components/DataTable.jsx';
 import OrganisationForm from './OrganisationForm.jsx';
 import Modal from '../../components/Modal.jsx';
 import DocumentUpload from '../../components/DocumentUpload.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const STAGE_LABELS = {
   prospect: 'Prospect', active: 'Active', partner: 'Partner', inactive: 'Inactive',
@@ -172,6 +173,8 @@ export default function OrganisationDetail() {
           </div>
         </Modal>
       )}
+
+      <SmartInput entityType="organisation" entityId={id} sectorId={org.sector_id} onUpdated={() => load()} />
     </div>
   );
 }

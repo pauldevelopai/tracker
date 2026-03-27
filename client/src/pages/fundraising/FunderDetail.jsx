@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../../hooks/useApi.js';
 import DataTable from '../../components/DataTable.jsx';
 import FunderForm from './FunderForm.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const TYPE_LABELS = { foundation: 'Foundation', government: 'Government', arts_council: 'Arts Council', innovation_fund: 'Innovation Fund', international_development: 'International Dev' };
 
@@ -51,6 +52,8 @@ export default function FunderDetail() {
       <DataTable columns={oppColumns} data={opportunities} onRowClick={row => navigate(`/fundraising/opportunities/${row.id}`)} emptyMessage="No opportunities from this funder yet." />
 
       {editing && <FunderForm funder={funder} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
+
+      <SmartInput entityType="funder" entityId={id} onUpdated={() => load()} />
     </div>
   );
 }

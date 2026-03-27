@@ -5,6 +5,7 @@ import { apiFetch } from '../../hooks/useApi.js';
 import SectorBadge from '../../components/SectorBadge.jsx';
 import Modal from '../../components/Modal.jsx';
 import EngagementForm from './EngagementForm.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const TYPE_LABELS = { ethical_ai_policy: 'Ethical AI Policy', ai_legal_framework: 'AI Legal Framework', ai_security_framework: 'AI Security Framework', mentorship: 'Mentorship' };
 const STATUS_LABELS = { scoping: 'Scoping', active: 'Active', review: 'Review', completed: 'Completed' };
@@ -269,6 +270,8 @@ export default function EngagementDetail() {
           onSaved={() => { setAddingMilestone(false); setEditingMilestone(null); loadMilestones(); }}
         />
       )}
+
+      <SmartInput entityType="engagement" entityId={id} sectorId={engagement.sector_id} onUpdated={() => loadEngagement()} />
     </div>
   );
 }
