@@ -45,6 +45,8 @@ import CurriculumBuilderAgent from './pages/agents/CurriculumBuilderAgent.jsx';
 import LeadFinderAgent from './pages/agents/LeadFinderAgent.jsx';
 import ImplementationCoachAgent from './pages/agents/ImplementationCoachAgent.jsx';
 import FeedbackList from './pages/feedback/FeedbackList.jsx';
+import TrainingMaterials from './pages/curriculum/TrainingMaterials.jsx';
+import LeadsPage from './pages/leads/LeadsPage.jsx';
 
 export default function App() {
   return (
@@ -65,6 +67,8 @@ export default function App() {
               <Route path="/programmes/:id" element={<CohortDetail />} />
               <Route path="/assessments" element={<AssessmentsList />} />
               <Route path="/assessments/:id" element={<AssessmentDetail />} />
+              <Route path="/training-materials" element={<TrainingMaterials />} />
+              <Route path="/course-builder" element={<CurriculumBuilderAgent />} />
               <Route path="/curriculum" element={<CoursesList />} />
               <Route path="/curriculum/:id" element={<CourseDetail />} />
               <Route path="/documents" element={<DocumentsList />} />
@@ -75,6 +79,7 @@ export default function App() {
               <Route path="/marketing/campaigns" element={<CampaignsList />} />
               <Route path="/marketing/campaigns/:id" element={<CampaignDetail />} />
               <Route path="/marketing/social" element={<SocialContent />} />
+              <Route path="/leads" element={<LeadsPage />} />
               <Route path="/fundraising" element={<PipelineView />} />
               <Route path="/fundraising/funders" element={<FundersList />} />
               <Route path="/fundraising/funders/:id" element={<FunderDetail />} />

@@ -126,4 +126,84 @@ router.put('/interactions/:id/feedback', async (req, res) => {
   }
 });
 
+// Train AI from all course materials, modules, and uploaded documents
+router.post('/train-from-materials', async (req, res) => {
+  try {
+    let processed = 0;
+    let newEntries = 0;
+
+    // 1. Process all course modules
+    const { rows: modules } = await pool.query(
+      `SELECT cm.id, cm.title, cm.description, cm.content, cm.feedback_notes, cm.effectiveness_rating,
+        c.title AS course_title, c.sector_id, s.name AS sector_name
+       FROM course_modules cm
+       JOIN courses c ON cm.course_id = c.id
+       LEFT JOIN sectors s ON c.sector_id = s.id
+       ORDER BY c.title, cm.order_index`
+    );
+
+    for (const mod of modules) {
+      processed++;
+      // Check if knowledge entry already exists for this module
+      const { rows: existing } = await pool.query(
+        "SELECT id FROM knowledge_entries WHERE source = $1 AND source_id = $2",
+        ['course_module', mod.id]
+      );
+      if (existing.length > 0) continue;
+
+      const content = [
+        `Course: ${mod.course_title}`,
+        `Module: ${mod.title}`,
+        mod.description ? `Description: ${mod.description}` : '',
+        mod.content ? `Content: ${mod.content.slice(0, 2000)}` : '',
+        mod.feedback_notes ? `Trainer feedback: ${mod.feedback_notes}` : '',
+        mod.effectiveness_rating ? `Effectiveness: ${mod.effectiveness_rating}/5` : '',
+      ].filter(Boolean).join('\n');
+
+      await createKnowledgeEntry({
+        title: `${mod.course_title} — ${mod.title}`,
+        content,
+        category: 'curriculum',
+        source: 'course_module',
+        sourceId: mod.id,
+        sectorId: mod.sector_id,
+        tags: ['course', 'module', mod.sector_name?.toLowerCase()].filter(Boolean),
+        confidence: mod.effectiveness_rating ? mod.effectiveness_rating / 5 : 0.5,
+      });
+      newEntries++;
+    }
+
+    // 2. Process uploaded training materials
+    const { rows: uploads } = await pool.query(
+      "SELECT id, original_name, extracted_text, sector_id FROM uploaded_documents WHERE entity_type = 'training_material' AND extracted_text IS NOT NULL"
+    );
+
+    for (const doc of uploads) {
+      processed++;
+      const { rows: existing } = await pool.query(
+        "SELECT id FROM knowledge_entries WHERE source = $1 AND source_id = $2",
+        ['uploaded_document', doc.id]
+      );
+      if (existing.length > 0) continue;
+
+      await createKnowledgeEntry({
+        title: `Training material: ${doc.original_name}`,
+        content: doc.extracted_text.slice(0, 5000),
+        category: 'curriculum',
+        source: 'uploaded_document',
+        sourceId: doc.id,
+        sectorId: doc.sector_id,
+        tags: ['training_material', 'uploaded'],
+        confidence: 0.6,
+      });
+      newEntries++;
+    }
+
+    res.json({ processed, newEntries });
+  } catch (err) {
+    console.error('Train from materials error:', err);
+    res.status(500).json({ message: err.message || 'Training failed' });
+  }
+});
+
 export default router;
