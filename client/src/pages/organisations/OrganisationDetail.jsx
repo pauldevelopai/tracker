@@ -13,6 +13,48 @@ const STAGE_LABELS = {
   prospect: 'Prospect', active: 'Active', partner: 'Partner', inactive: 'Inactive',
 };
 
+const AI_LEVEL_COLOURS = {
+  starting: '#e74c3c',
+  in_progress: '#f39c12',
+  strong: '#27ae60',
+  excellent: '#2980b9',
+};
+
+function AIScoreBadge({ ai }) {
+  if (!ai) return null;
+  const bg = AI_LEVEL_COLOURS[ai.level] || '#888';
+  return (
+    <span style={{ background: bg, color: '#fff', padding: '2px 10px', borderRadius: 12, fontSize: 13, fontWeight: 600, marginLeft: 8 }}>
+      AI: {ai.score ?? '—'} ({(ai.level || 'unknown').replace(/_/g, ' ')})
+    </span>
+  );
+}
+
+function AIBreakdown({ ai }) {
+  if (!ai) return null;
+  const items = [
+    { label: 'Policy', ok: ai.hasPolicy },
+    { label: 'Framework', ok: ai.hasFramework },
+    { label: 'Security', ok: ai.hasSecurity },
+    { label: 'Mentoring', ok: ai.hasMentoring },
+    { label: 'Learning', ok: ai.avgProgress > 0 },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13, marginTop: 4 }}>
+      {items.map(i => (
+        <span key={i.label}>{i.ok ? '\u2705' : '\u274C'} {i.label}</span>
+      ))}
+      {ai.avgProgress != null && (
+        <span style={{ color: 'var(--text-secondary)' }}>Avg progress: {Math.round(ai.avgProgress)}%</span>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  return <span className={`stage-badge stage-${status}`}>{(status || '—').replace(/_/g, ' ')}</span>;
+}
+
 export default function OrganisationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -63,7 +105,16 @@ export default function OrganisationDetail() {
         <span className={`stage-badge stage-${org.relationship_stage}`}>
           {STAGE_LABELS[org.relationship_stage] || org.relationship_stage}
         </span>
+        <AIScoreBadge ai={org.ai_implementation} />
       </div>
+      {org.funder_name && (
+        <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>Funded by: {org.funder_name}</div>
+      )}
+      {org.ai_implementation && (
+        <div style={{ marginBottom: 12 }}>
+          <AIBreakdown ai={org.ai_implementation} />
+        </div>
+      )}
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '16px' }}>
@@ -155,6 +206,125 @@ export default function OrganisationDetail() {
         <h2>Contacts ({contacts.length})</h2>
         <DataTable columns={contactColumns} data={contacts} emptyMessage="No contacts linked to this organisation." />
       </div>
+
+      {/* Cohorts */}
+      {org.cohorts && org.cohorts.length > 0 && (
+        <div className="detail-section">
+          <h2>Cohorts ({org.cohorts.length})</h2>
+          <table className="data-table">
+            <thead>
+              <tr><th>Name</th><th>Client</th><th>Delivery</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {org.cohorts.map(c => (
+                <tr key={c.id} onClick={() => navigate(`/programmes/${c.id}`)} style={{ cursor: 'pointer' }}>
+                  <td style={{ fontWeight: 500 }}>{c.name}</td>
+                  <td>{c.client_name || '—'}</td>
+                  <td>{(c.delivery_type || '—').replace(/_/g, ' ')}</td>
+                  <td><StatusBadge status={c.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Courses */}
+      {org.courses && org.courses.length > 0 && (
+        <div className="detail-section">
+          <h2>Courses ({org.courses.length})</h2>
+          <table className="data-table">
+            <thead>
+              <tr><th>Title</th><th>Version</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {org.courses.map(c => (
+                <tr key={c.id} onClick={() => navigate(`/curriculum/${c.id}`)} style={{ cursor: 'pointer' }}>
+                  <td style={{ fontWeight: 500 }}>{c.title}</td>
+                  <td>{c.version || '—'}</td>
+                  <td><StatusBadge status={c.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Mentoring & Learning */}
+      {((org.mentoring && org.mentoring.length > 0) || (org.learners && org.learners.length > 0)) && (
+        <div className="detail-section">
+          <h2>Mentoring &amp; Learning</h2>
+          {org.mentoring && org.mentoring.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 15, marginBottom: 8 }}>Mentoring Engagements</h3>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Type</th><th>Mentor</th><th>Sessions</th><th>Start</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {org.mentoring.map(m => (
+                    <tr key={m.id}>
+                      <td>{(m.type || '—').replace(/_/g, ' ')}</td>
+                      <td>{m.mentor_name || '—'}</td>
+                      <td>{m.session_count ?? '—'}</td>
+                      <td>{m.start_date ? new Date(m.start_date).toLocaleDateString() : '—'}</td>
+                      <td><StatusBadge status={m.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {org.learners && org.learners.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 15, margin: '16px 0 8px' }}>Learning Journeys</h3>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Learner</th><th>Skill Level</th><th>Progress</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {org.learners.map(l => (
+                    <tr key={l.id}>
+                      <td style={{ fontWeight: 500 }}>{l.first_name} {l.last_name}</td>
+                      <td>{(l.skill_level || '—').replace(/_/g, ' ')}</td>
+                      <td style={{ minWidth: 120 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ flex: 1, height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+                            <div style={{ width: `${l.overall_progress || 0}%`, height: '100%', background: 'var(--primary)', borderRadius: 4 }} />
+                          </div>
+                          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.overall_progress || 0}%</span>
+                        </div>
+                      </td>
+                      <td><StatusBadge status={l.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Generated Documents */}
+      {org.documents && org.documents.length > 0 && (
+        <div className="detail-section">
+          <h2>Generated Documents ({org.documents.length})</h2>
+          <table className="data-table">
+            <thead>
+              <tr><th>Title</th><th>Type</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {org.documents.map(d => (
+                <tr key={d.id} onClick={() => navigate(`/documents/${d.id}`)} style={{ cursor: 'pointer' }}>
+                  <td style={{ fontWeight: 500 }}>{d.title}</td>
+                  <td>{(d.template_type || '—').replace(/_/g, ' ')}</td>
+                  <td><StatusBadge status={d.status} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {editing && (
         <OrganisationForm

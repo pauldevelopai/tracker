@@ -28,6 +28,12 @@ export default function CohortDetail() {
   const [editingParticipant, setEditingParticipant] = useState(null);
   const [addingSession, setAddingSession] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
+  const [organisations, setOrganisations] = useState([]);
+  const [courses, setCourses] = useState([]);
+  const [allOrgs, setAllOrgs] = useState([]);
+  const [allCourses, setAllCourses] = useState([]);
+  const [selectedOrgId, setSelectedOrgId] = useState('');
+  const [selectedCourseId, setSelectedCourseId] = useState('');
 
   function loadCohort() {
     apiFetch(`/cohorts/${id}`).then(setCohort).catch(() => navigate('/programmes'));
@@ -41,7 +47,28 @@ export default function CohortDetail() {
     apiFetch(`/cohorts/${id}/sessions`).then(setSessions).catch(() => setSessions([]));
   }
 
-  useEffect(() => { loadCohort(); loadParticipants(); loadSessions(); }, [id]);
+  function loadOrganisations() {
+    apiFetch(`/cohorts/${id}`).then(data => setOrganisations(data.organisations || [])).catch(() => setOrganisations([]));
+  }
+
+  function loadCourses() {
+    apiFetch(`/cohorts/${id}`).then(data => setCourses(data.courses || [])).catch(() => setCourses([]));
+  }
+
+  useEffect(() => {
+    loadCohort(); loadParticipants(); loadSessions();
+    apiFetch(`/cohorts/${id}`).then(data => {
+      setOrganisations(data.organisations || []);
+      setCourses(data.courses || []);
+    }).catch(() => {});
+  }, [id]);
+
+  useEffect(() => {
+    if (cohort?.sector_id) {
+      apiFetch(`/organisations?sector_id=${cohort.sector_id}`).then(data => setAllOrgs(Array.isArray(data) ? data : data.organisations || [])).catch(() => setAllOrgs([]));
+      apiFetch(`/courses?sector_id=${cohort.sector_id}`).then(data => setAllCourses(Array.isArray(data) ? data : data.courses || [])).catch(() => setAllCourses([]));
+    }
+  }, [cohort?.sector_id]);
 
   async function handleDelete() {
     await apiFetch(`/cohorts/${id}`, { method: 'DELETE' });
@@ -56,6 +83,30 @@ export default function CohortDetail() {
   async function removeSession(sessionId) {
     await apiFetch(`/cohorts/${id}/sessions/${sessionId}`, { method: 'DELETE' });
     loadSessions();
+  }
+
+  async function addOrganisation() {
+    if (!selectedOrgId) return;
+    await apiFetch(`/cohorts/${id}/organisations`, { method: 'POST', body: JSON.stringify({ organisation_id: selectedOrgId }) });
+    setSelectedOrgId('');
+    loadOrganisations();
+  }
+
+  async function removeOrganisation(orgId) {
+    await apiFetch(`/cohorts/${id}/organisations/${orgId}`, { method: 'DELETE' });
+    loadOrganisations();
+  }
+
+  async function addCourse() {
+    if (!selectedCourseId) return;
+    await apiFetch(`/cohorts/${id}/courses`, { method: 'POST', body: JSON.stringify({ course_id: selectedCourseId }) });
+    setSelectedCourseId('');
+    loadCourses();
+  }
+
+  async function removeCourse(courseId) {
+    await apiFetch(`/cohorts/${id}/courses/${courseId}`, { method: 'DELETE' });
+    loadCourses();
   }
 
   if (!cohort) return null;
@@ -136,6 +187,12 @@ export default function CohortDetail() {
         <button className={`tab ${activeTab === 'participants' ? 'active' : ''}`} onClick={() => setActiveTab('participants')}>
           Participants ({participants.length})
         </button>
+        <button className={`tab ${activeTab === 'organisations' ? 'active' : ''}`} onClick={() => setActiveTab('organisations')}>
+          Organisations ({organisations.length})
+        </button>
+        <button className={`tab ${activeTab === 'courses' ? 'active' : ''}`} onClick={() => setActiveTab('courses')}>
+          Courses ({courses.length})
+        </button>
         <button className={`tab ${activeTab === 'sessions' ? 'active' : ''}`} onClick={() => setActiveTab('sessions')}>
           Sessions ({sessions.length})
         </button>
@@ -151,6 +208,96 @@ export default function CohortDetail() {
             <button className="btn btn-primary btn-small" onClick={() => setAddingParticipant(true)}>+ Add Participant</button>
           </div>
           <DataTable columns={participantColumns} data={participants} emptyMessage="No participants enrolled yet." />
+        </div>
+      )}
+
+      {/* Organisations tab */}
+      {activeTab === 'organisations' && (
+        <div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <select value={selectedOrgId} onChange={e => setSelectedOrgId(e.target.value)} className="form-select" style={{ flex: 1 }}>
+              <option value="">Select organisation to add…</option>
+              {allOrgs.filter(o => !organisations.some(existing => existing.id === o.id)).map(o => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary btn-small" onClick={addOrganisation} disabled={!selectedOrgId}>Add</button>
+          </div>
+          {organisations.length === 0 ? (
+            <div className="empty-state"><h3>No organisations linked yet.</h3></div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Country</th>
+                  <th>Stage</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {organisations.map(org => (
+                  <tr key={org.id}>
+                    <td><Link to={`/organisations/${org.id}`} style={{ fontWeight: 500 }}>{org.name}</Link></td>
+                    <td>{org.type || '—'}</td>
+                    <td>{org.country || '—'}</td>
+                    <td>{org.relationship_stage ? (
+                      <span className={`stage-badge stage-${org.relationship_stage}`}>{org.relationship_stage.charAt(0).toUpperCase() + org.relationship_stage.slice(1)}</span>
+                    ) : '—'}</td>
+                    <td>
+                      <button className="btn btn-danger btn-small" onClick={() => removeOrganisation(org.id)}>Remove</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Courses tab */}
+      {activeTab === 'courses' && (
+        <div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <select value={selectedCourseId} onChange={e => setSelectedCourseId(e.target.value)} className="form-select" style={{ flex: 1 }}>
+              <option value="">Select course to add…</option>
+              {allCourses.filter(c => !courses.some(existing => existing.id === c.id)).map(c => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary btn-small" onClick={addCourse} disabled={!selectedCourseId}>Add</button>
+          </div>
+          {courses.length === 0 ? (
+            <div className="empty-state"><h3>No courses linked yet.</h3></div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Version</th>
+                  <th>Modules</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {courses.map(course => (
+                  <tr key={course.id}>
+                    <td><Link to={`/curriculum/${course.id}`} style={{ fontWeight: 500 }}>{course.title}</Link></td>
+                    <td>{course.status ? (
+                      <span className={`stage-badge stage-${course.status}`}>{course.status.charAt(0).toUpperCase() + course.status.slice(1)}</span>
+                    ) : '—'}</td>
+                    <td>{course.version || '—'}</td>
+                    <td>{course.module_count ?? '—'}</td>
+                    <td>
+                      <button className="btn btn-danger btn-small" onClick={() => removeCourse(course.id)}>Remove</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

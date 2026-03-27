@@ -70,14 +70,71 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT o.*, s.name AS sector_name, s.colour AS sector_colour
+      `SELECT o.*, s.name AS sector_name, s.colour AS sector_colour, fo.name AS funder_name
        FROM organisations o
        LEFT JOIN sectors s ON o.sector_id = s.id
+       LEFT JOIN organisations fo ON o.funder_organisation_id = fo.id
        WHERE o.id = $1`,
       [req.params.id]
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Organisation not found' });
-    res.json(rows[0]);
+    const org = rows[0];
+
+    // Cohorts this org is in
+    const { rows: cohorts } = await pool.query(
+      `SELECT c.id, c.name, c.status, c.delivery_type, co.name AS client_name
+       FROM cohort_organisations corg JOIN cohorts c ON corg.cohort_id = c.id
+       LEFT JOIN organisations co ON c.client_organisation_id = co.id
+       WHERE corg.organisation_id = $1 ORDER BY c.name`,
+      [req.params.id]
+    );
+
+    // Courses linked via cohorts
+    const { rows: courses } = await pool.query(
+      `SELECT DISTINCT c.id, c.title, c.status, c.version
+       FROM cohort_organisations corg JOIN cohort_courses cc ON cc.cohort_id = corg.cohort_id
+       JOIN courses c ON cc.course_id = c.id WHERE corg.organisation_id = $1`,
+      [req.params.id]
+    );
+
+    // Mentoring engagements
+    const { rows: mentoring } = await pool.query(
+      `SELECT se.id, se.type, se.status, se.start_date, se.session_count, t.name AS mentor_name
+       FROM service_engagements se LEFT JOIN team_members t ON se.mentor_id = t.id
+       WHERE se.organisation_id = $1 ORDER BY se.start_date DESC NULLS LAST`,
+      [req.params.id]
+    );
+
+    // Learning journeys
+    const { rows: learners } = await pool.query(
+      `SELECT lj.id, lj.status, lj.overall_progress, lj.skill_level, c.first_name, c.last_name
+       FROM learning_journeys lj JOIN contacts c ON lj.contact_id = c.id
+       WHERE lj.organisation_id = $1 ORDER BY lj.overall_progress DESC`,
+      [req.params.id]
+    );
+
+    // Documents
+    const { rows: documents } = await pool.query(
+      `SELECT gd.id, gd.title, gd.status, dt.type AS template_type
+       FROM generated_documents gd LEFT JOIN document_templates dt ON gd.template_id = dt.id
+       WHERE gd.organisation_id = $1 ORDER BY gd.created_at DESC`,
+      [req.params.id]
+    );
+
+    // AI implementation score
+    const hasPolicy = documents.some(d => d.template_type === 'ethical_ai_policy' && d.status === 'final');
+    const hasFramework = documents.some(d => d.template_type === 'ai_legal_framework' && d.status === 'final');
+    const hasSecurity = documents.some(d => d.template_type === 'ai_security_framework' && d.status === 'final');
+    const hasMentoring = mentoring.some(m => m.status === 'active');
+    const avgProgress = learners.length > 0 ? learners.reduce((s, l) => s + (l.overall_progress || 0), 0) / learners.length : 0;
+    let aiScore = 0;
+    if (hasPolicy) aiScore += 2; if (hasFramework) aiScore += 2; if (hasSecurity) aiScore += 1;
+    if (hasMentoring) aiScore += 2; if (avgProgress > 50) aiScore += 2; else if (avgProgress > 0) aiScore += 1;
+    if (org.relationship_stage === 'active') aiScore += 1;
+    const aiLevel = aiScore >= 9 ? 'excellent' : aiScore >= 6 ? 'strong' : aiScore >= 3 ? 'in_progress' : 'starting';
+
+    res.json({ ...org, cohorts, courses, mentoring, learners, documents,
+      ai_implementation: { score: aiScore, level: aiLevel, hasPolicy, hasFramework, hasSecurity, hasMentoring, avgProgress } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });

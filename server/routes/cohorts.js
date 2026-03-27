@@ -60,14 +60,24 @@ router.get('/:id', async (req, res) => {
 
     // Get organisations in this cohort
     const { rows: orgs } = await pool.query(
-      `SELECT corg.id AS link_id, o.id, o.name, o.type, o.country
+      `SELECT o.id, o.name, o.type, o.country, o.relationship_stage
        FROM cohort_organisations corg
        JOIN organisations o ON corg.organisation_id = o.id
        WHERE corg.cohort_id = $1 ORDER BY o.name`,
       [req.params.id]
     );
 
-    res.json({ ...rows[0], organisations: orgs });
+    // Get courses linked to this cohort
+    const { rows: courses } = await pool.query(
+      `SELECT c.id, c.title, c.status, c.version, c.delivery_type,
+        (SELECT count(*)::int FROM course_modules cm WHERE cm.course_id = c.id) AS module_count
+       FROM cohort_courses cc
+       JOIN courses c ON cc.course_id = c.id
+       WHERE cc.cohort_id = $1 ORDER BY c.title`,
+      [req.params.id]
+    );
+
+    res.json({ ...rows[0], organisations: orgs, courses });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });
@@ -138,6 +148,30 @@ router.post('/:id/organisations', async (req, res) => {
 router.delete('/:id/organisations/:orgId', async (req, res) => {
   try {
     await pool.query('DELETE FROM cohort_organisations WHERE cohort_id = $1 AND organisation_id = $2', [req.params.id, req.params.orgId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Add course to cohort
+router.post('/:id/courses', async (req, res) => {
+  try {
+    const { course_id } = req.body;
+    if (!course_id) return res.status(400).json({ message: 'course_id required' });
+    await pool.query('INSERT INTO cohort_courses (cohort_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, course_id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Remove course from cohort
+router.delete('/:id/courses/:courseId', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM cohort_courses WHERE cohort_id = $1 AND course_id = $2', [req.params.id, req.params.courseId]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
