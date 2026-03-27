@@ -33,16 +33,49 @@ export default function LeadsPage() {
 
   async function runLeadMiner() {
     setMining(true);
-    setMineResult('');
+    setMineResult('⏳ Lead Miner starting — connecting to Gmail...');
     try {
       await apiFetch('/background-jobs/lead_miner/run', { method: 'POST' });
-      setMineResult('Lead Miner started — scanning your Gmail now. This runs in the background and may take a few minutes. Refresh the page to see new leads.');
-      // Poll for results after a delay
-      setTimeout(() => { load(); }, 30000);
-      setTimeout(() => { load(); }, 60000);
+      setMineResult('⏳ Scanning your Gmail for potential leads... (this takes 1-2 minutes)');
+
+      // Poll for completion
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const jobData = await apiFetch('/background-jobs');
+          const minerJob = jobData.find(j => j.name === 'lead_miner');
+          if (minerJob) {
+            if (minerJob.last_status === 'success' && minerJob.last_run_at && (Date.now() - new Date(minerJob.last_run_at).getTime()) < 120000) {
+              clearInterval(pollInterval);
+              const items = minerJob.last_items_processed || 0;
+              setMineResult(items > 0
+                ? `✅ Done — found ${items} new lead${items > 1 ? 's' : ''}. They've been added to the pipeline below.`
+                : '✅ Done — no new leads found this time. All contacts in your recent emails are already known.');
+              setMining(false);
+              load();
+              return;
+            } else if (minerJob.last_status === 'error' && (Date.now() - new Date(minerJob.last_run_at).getTime()) < 120000) {
+              clearInterval(pollInterval);
+              setMineResult('❌ Mining failed: ' + (minerJob.last_error || 'Unknown error'));
+              setMining(false);
+              return;
+            }
+          }
+        } catch (e) { /* ignore poll errors */ }
+
+        // Update progress message
+        if (attempts <= 3) setMineResult('⏳ Searching Gmail... (checking journalism, media, legal, AI conversations)');
+        else if (attempts <= 6) setMineResult('⏳ Found contacts, asking Claude to classify them...');
+        else if (attempts <= 12) setMineResult('⏳ Claude is analysing contacts... almost done');
+        else {
+          clearInterval(pollInterval);
+          setMineResult('⏳ Still running in background. Refresh the page in a minute to see results.');
+          setMining(false);
+        }
+      }, 10000); // Poll every 10s
     } catch (err) {
-      setMineResult('Mining failed: ' + err.message);
-    } finally {
+      setMineResult('❌ Mining failed: ' + err.message);
       setMining(false);
     }
   }

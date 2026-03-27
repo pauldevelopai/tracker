@@ -813,15 +813,24 @@ export async function runLeadMiner() {
   for (const query of searches) {
     try {
       const messages = await searchEmails(query, 20);
+      console.log(`[LeadMiner] Search "${query.slice(0, 50)}..." → ${messages.length} messages`);
       for (const msg of messages) {
         try {
           const email = await readEmail(msg.id);
           if (!email) continue;
 
-          // Extract From header
-          const fromHeader = email.headers?.from || '';
+          // readEmail returns flat: { from, subject, date, body }
+          const fromHeader = email.from || '';
           const fromMatch = fromHeader.match(/^"?([^"<]+)"?\s*<([^>]+)>/);
-          if (!fromMatch) continue;
+          if (!fromMatch) {
+            // Try simpler pattern: just email@domain.com
+            const simpleMatch = fromHeader.match(/([\w.+-]+@[\w.-]+\.\w+)/);
+            if (!simpleMatch) continue;
+            const senderEmail = simpleMatch[1].toLowerCase();
+            if (knownEmails.has(senderEmail) || senderEmail.includes('noreply') || senderEmail.includes('no-reply') || senderEmail.includes('paul@developai') || discoveredContacts.has(senderEmail)) continue;
+            discoveredContacts.set(senderEmail, { name: fromHeader.replace(/<.*>/, '').trim() || senderEmail.split('@')[0], email: senderEmail, subject: email.subject || '', date: email.date || '' });
+            continue;
+          }
 
           const senderName = fromMatch[1].trim();
           const senderEmail = fromMatch[2].trim().toLowerCase();
@@ -832,21 +841,21 @@ export async function runLeadMiner() {
           if (senderEmail.includes('paul@developai') || senderEmail.includes('paulmcnally')) continue;
           if (discoveredContacts.has(senderEmail)) continue;
 
-          // Extract subject for context
-          const subject = email.headers?.subject || '';
-
           discoveredContacts.set(senderEmail, {
             name: senderName,
             email: senderEmail,
-            subject,
-            date: email.headers?.date || '',
+            subject: email.subject || '',
+            date: email.date || '',
           });
-        } catch (e) { /* skip individual email errors */ }
+        } catch (e) { console.log(`[LeadMiner] Email read error: ${e.message}`); }
       }
     } catch (e) {
+      console.log(`[LeadMiner] Search failed: ${e.message}`);
       results.push(`Search failed: ${e.message}`);
     }
   }
+
+  console.log(`[LeadMiner] Discovered ${discoveredContacts.size} unique contacts`);
 
   if (discoveredContacts.size === 0) {
     return { result: 'No new potential leads found in recent emails', itemsProcessed: 0 };
