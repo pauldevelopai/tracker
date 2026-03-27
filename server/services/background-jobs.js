@@ -889,11 +889,18 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
     });
 
     // Parse Claude's response
+    console.log(`[LeadMiner] Claude response length: ${analysis.length} chars`);
     let leads = [];
     try {
       const jsonMatch = analysis.match(/\[[\s\S]*\]/);
-      if (jsonMatch) leads = JSON.parse(jsonMatch[0]);
+      if (jsonMatch) {
+        leads = JSON.parse(jsonMatch[0]);
+        console.log(`[LeadMiner] Claude classified ${leads.length} leads (${leads.filter(l => l.is_lead).length} qualified)`);
+      } else {
+        console.log(`[LeadMiner] No JSON array found in Claude response. First 200 chars: ${analysis.slice(0, 200)}`);
+      }
     } catch (e) {
+      console.log(`[LeadMiner] JSON parse error: ${e.message}. First 200 chars: ${analysis.slice(0, 200)}`);
       results.push('Failed to parse Claude lead analysis');
     }
 
@@ -903,9 +910,10 @@ Only include contacts where is_lead is true. If none qualify, return [].`,
     sectorRows.forEach(s => { sectorMap[s.name.toLowerCase()] = s.id; });
 
     // Insert qualified leads as prospect contacts
+    console.log(`[LeadMiner] Processing ${leads.length} classified contacts...`);
     for (const lead of leads) {
-      if (!lead.is_lead || !lead.email) continue;
-      if (knownEmails.has(lead.email.toLowerCase())) continue;
+      if (!lead.is_lead || !lead.email) { continue; }
+      if (knownEmails.has(lead.email.toLowerCase())) { console.log(`[LeadMiner] Skip known: ${lead.email}`); continue; }
 
       const sectorId = sectorMap[lead.sector?.toLowerCase()] || sectorRows[0]?.id;
       const nameParts = (lead.name || '').split(' ');
