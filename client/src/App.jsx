@@ -47,6 +47,7 @@ import ImplementationCoachAgent from './pages/agents/ImplementationCoachAgent.js
 import FeedbackList from './pages/feedback/FeedbackList.jsx';
 import TrainingMaterials from './pages/curriculum/TrainingMaterials.jsx';
 import LeadsPage from './pages/leads/LeadsPage.jsx';
+import MentoringPage from './pages/mentoring/MentoringPage.jsx';
 
 export default function App() {
   return (
@@ -74,6 +75,7 @@ export default function App() {
               <Route path="/documents" element={<DocumentsList />} />
               <Route path="/documents/new" element={<DocumentGenerate />} />
               <Route path="/documents/:id" element={<DocumentDetail />} />
+              <Route path="/mentoring" element={<MentoringPage />} />
               <Route path="/services" element={<ServicesList />} />
               <Route path="/services/:id" element={<EngagementDetail />} />
               <Route path="/marketing/campaigns" element={<CampaignsList />} />

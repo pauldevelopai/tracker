@@ -42,20 +42,62 @@ export default function DocumentsList() {
     { key: 'created_at', label: 'Created', render: row => new Date(row.created_at).toLocaleDateString() },
   ];
 
+  const TYPE_DESCRIPTIONS = {
+    ethical_ai_policy: { icon: '📋', title: 'Ethical AI Policies', desc: 'Comprehensive ethical AI usage policies for organisations. Covers principles of responsible use, permitted/prohibited activities, training requirements, and review processes.', color: '#6366F1' },
+    ai_legal_framework: { icon: '⚖️', title: 'AI Legal Frameworks', desc: 'Governance and compliance frameworks addressing regulatory landscape, liability, intellectual property, vendor risk, and implementation roadmaps for AI in professional settings.', color: '#10B981' },
+    ai_security_framework: { icon: '🔒', title: 'AI Security Protocols', desc: 'Data security assessments and protocols for AI adoption. Covers threat modelling, access control, secure tool vetting, incident response, and staff awareness for organisations using AI tools.', color: '#EF4444' },
+  };
+
+  const policyDocs = docs.filter(d => d.template_type === 'ethical_ai_policy');
+  const frameworkDocs = docs.filter(d => d.template_type === 'ai_legal_framework');
+  const securityDocs = docs.filter(d => d.template_type === 'ai_security_framework');
+
   return (
     <div>
-      <PageHeader title="Documents">
-        {activeTab === 'documents' && (
-          <button className="btn btn-primary" onClick={() => navigate('/documents/new')}>+ Generate Document</button>
-        )}
-        {activeTab === 'templates' && (
-          <button className="btn btn-primary" onClick={() => setEditingTemplate('new')}>+ Add Template</button>
-        )}
+      <PageHeader title="Policies, Frameworks & Security">
+        <button className="btn btn-primary" onClick={() => navigate('/documents/new')}>+ Generate Document</button>
       </PageHeader>
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+        AI-generated compliance documents for your client organisations. Holly creates tailored policies, legal frameworks, and security protocols using Claude, informed by each organisation's needs assessment.
+      </p>
 
+      {/* Three type cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 28 }}>
+        {TYPES.map(type => {
+          const info = TYPE_DESCRIPTIONS[type];
+          const typeDocs = docs.filter(d => d.template_type === type);
+          const typeTemplates = templates.filter(t => t.type === type);
+          return (
+            <div key={type} className="card" style={{ padding: 20, borderTop: `4px solid ${info.color}` }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{info.icon}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>{info.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 12 }}>{info.desc}</div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
+                <div><span style={{ fontWeight: 700, color: info.color }}>{typeDocs.length}</span> documents</div>
+                <div><span style={{ fontWeight: 700 }}>{typeTemplates.length}</span> templates</div>
+              </div>
+              <button className="btn btn-primary btn-small" style={{ marginTop: 12, background: info.color, border: 'none' }}
+                onClick={() => navigate('/documents/new')}>
+                Generate {info.title.split(' ').pop()}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Tabs */}
       <div className="tabs">
         <button className={`tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>
-          Documents ({docs.length})
+          All Documents ({docs.length})
+        </button>
+        <button className={`tab ${activeTab === 'policies' ? 'active' : ''}`} onClick={() => setActiveTab('policies')}>
+          Policies ({policyDocs.length})
+        </button>
+        <button className={`tab ${activeTab === 'frameworks' ? 'active' : ''}`} onClick={() => setActiveTab('frameworks')}>
+          Frameworks ({frameworkDocs.length})
+        </button>
+        <button className={`tab ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>
+          Security ({securityDocs.length})
         </button>
         <button className={`tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
           Templates ({templates.length})
@@ -63,40 +105,46 @@ export default function DocumentsList() {
       </div>
 
       {activeTab === 'documents' && (
-        <DataTable
-          columns={columns}
-          data={docs}
-          onRowClick={row => navigate(`/documents/${row.id}`)}
-          emptyMessage="No documents yet. Generate your first AI policy or legal framework."
-        />
+        <DataTable columns={columns} data={docs} onRowClick={row => navigate(`/documents/${row.id}`)}
+          emptyMessage="No documents yet. Generate your first AI policy, legal framework, or security protocol." />
       )}
-
+      {activeTab === 'policies' && (
+        <DataTable columns={columns} data={policyDocs} onRowClick={row => navigate(`/documents/${row.id}`)}
+          emptyMessage="No ethical AI policies yet." />
+      )}
+      {activeTab === 'frameworks' && (
+        <DataTable columns={columns} data={frameworkDocs} onRowClick={row => navigate(`/documents/${row.id}`)}
+          emptyMessage="No AI legal frameworks yet." />
+      )}
+      {activeTab === 'security' && (
+        <DataTable columns={columns} data={securityDocs} onRowClick={row => navigate(`/documents/${row.id}`)}
+          emptyMessage="No AI security protocols yet." />
+      )}
       {activeTab === 'templates' && (
-        <table className="data-table">
-          <thead>
-            <tr><th>Title</th><th>Type</th><th>Sector</th><th>Active</th><th></th></tr>
-          </thead>
-          <tbody>
-            {templates.map(t => (
-              <tr key={t.id} style={{ opacity: t.is_active ? 1 : 0.5 }}>
-                <td style={{ fontWeight: 500 }}>{t.title}</td>
-                <td><span className="stage-badge stage-active">{TYPE_LABELS[t.type] || t.type}</span></td>
-                <td>{t.sector_name}</td>
-                <td>{t.is_active ? 'Yes' : 'No'}</td>
-                <td><button className="btn btn-secondary btn-small" onClick={() => setEditingTemplate(t)}>Edit</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+            <button className="btn btn-primary btn-small" onClick={() => setEditingTemplate('new')}>+ Add Template</button>
+          </div>
+          <table className="data-table">
+            <thead><tr><th>Title</th><th>Type</th><th>Sector</th><th>Active</th><th></th></tr></thead>
+            <tbody>
+              {templates.map(t => (
+                <tr key={t.id} style={{ opacity: t.is_active ? 1 : 0.5 }}>
+                  <td style={{ fontWeight: 500 }}>{t.title}</td>
+                  <td><span className="stage-badge stage-active">{TYPE_LABELS[t.type] || t.type}</span></td>
+                  <td>{t.sector_name}</td>
+                  <td>{t.is_active ? 'Yes' : 'No'}</td>
+                  <td><button className="btn btn-secondary btn-small" onClick={() => setEditingTemplate(t)}>Edit</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {editingTemplate && (
-        <TemplateForm
-          template={editingTemplate === 'new' ? null : editingTemplate}
-          sectors={sectors}
-          onClose={() => setEditingTemplate(null)}
-          onSaved={() => { setEditingTemplate(null); loadTemplates(); }}
-        />
+        <TemplateForm template={editingTemplate === 'new' ? null : editingTemplate} sectors={sectors}
+          onClose={() => setEditingTemplate(null)} onSaved={() => { setEditingTemplate(null); loadTemplates(); }} />
       )}
     </div>
   );
