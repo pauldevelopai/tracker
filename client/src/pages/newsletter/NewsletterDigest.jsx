@@ -144,7 +144,7 @@ export default function NewsletterDigest() {
 
       <div className="tabs">
         <button className={`tab ${activeTab === 'digest' ? 'active' : ''}`} onClick={() => setActiveTab('digest')}>
-          Daily Digest
+          Daily Briefing
         </button>
         <button className={`tab ${activeTab === 'curriculum' ? 'active' : ''}`} onClick={() => setActiveTab('curriculum')}>
           Curriculum Items ({activeTab === 'curriculum' ? items.length : curriculumInDigest.length})
@@ -164,7 +164,7 @@ export default function NewsletterDigest() {
               style={{ padding: '6px 10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13 }}
             />
             <button className="btn btn-secondary btn-small" onClick={regenerateDigest} disabled={regenerating}>
-              {regenerating ? 'Regenerating...' : 'Regenerate Digest'}
+              {regenerating ? 'Regenerating...' : 'Regenerate Briefing'}
             </button>
           </div>
 
@@ -232,7 +232,7 @@ export default function NewsletterDigest() {
           {digestItems.length > 0 && (
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
-                Digest ({digestItems.length})
+                Other Items ({digestItems.length})
               </h3>
               {digestItems.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} />)}
             </div>
@@ -316,7 +316,15 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
               {item.curriculum_relevance_reason}
             </div>
           )}
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{item.sender}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {item.source_url ? (
+              <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366F1', textDecoration: 'underline' }}>{item.sender}</a>
+            ) : (
+              <span>{item.sender}</span>
+            )}
+            {item.received_at && <span style={{ color: '#94A3B8' }}>•</span>}
+            {item.received_at && <span>{new Date(item.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: 8, flexShrink: 0 }}>
           {item.is_curriculum_relevant && !item.promoted_to_knowledge && (
