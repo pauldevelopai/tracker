@@ -8,6 +8,7 @@ import Modal from '../../components/Modal.jsx';
 import CohortForm from './CohortForm.jsx';
 import ParticipantForm from './ParticipantForm.jsx';
 import SessionForm from './SessionForm.jsx';
+import SmartInput from '../../components/SmartInput.jsx';
 
 const STATUS_LABELS = { planned: 'Planned', active: 'Active', completed: 'Completed', cancelled: 'Cancelled' };
 const DELIVERY_LABELS = { online_3x2hr: 'Online 3x2hr', in_person_2day: 'In-Person 2 day' };
@@ -231,6 +232,9 @@ export default function CohortDetail() {
       {editingSession && (
         <SessionForm session={editingSession} cohortId={id} onClose={() => setEditingSession(null)} onSaved={() => { setEditingSession(null); loadSessions(); }} />
       )}
+
+      {/* Smart Input — add info via text or document */}
+      <SmartInput entityType="cohort" entityId={id} sectorId={cohort.sector_id} onUpdated={() => { loadCohort(); loadParticipants(); }} />
     </div>
   );
 }

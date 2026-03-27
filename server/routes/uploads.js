@@ -230,6 +230,181 @@ router.post('/approve', async (req, res) => {
   }
 });
 
+// Smart Input — absorb a text note into an entity
+router.post('/smart-input', async (req, res) => {
+  try {
+    const { text, entityType, entityId, sectorId } = req.body;
+    if (!text?.trim() || !entityType || !entityId) {
+      return res.status(400).json({ message: 'text, entityType, and entityId required' });
+    }
+
+    // Get current entity data for context
+    const tableMap = {
+      organisation: 'organisations', contact: 'contacts', cohort: 'cohorts',
+      course: 'courses', engagement: 'service_engagements', funder: 'funders',
+      opportunity: 'funding_opportunities',
+    };
+    const table = tableMap[entityType];
+    if (!table) return res.status(400).json({ message: 'Unknown entity type' });
+
+    const { rows: [entity] } = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [entityId]);
+    if (!entity) return res.status(404).json({ message: 'Entity not found' });
+
+    // Use Claude to figure out what to update
+    const { callClaude } = await import('../services/claude.js');
+    const columns = Object.keys(entity).filter(k => !['id', 'created_at', 'updated_at', 'sector_id'].includes(k));
+
+    const updateResult = await callClaude({
+      system: `You are a data entry assistant. Given new information about a ${entityType}, determine what database fields to update.
+
+Current ${entityType} fields and values:
+${columns.map(k => `- ${k}: ${entity[k] !== null ? String(entity[k]).slice(0, 200) : 'null'}`).join('\n')}
+
+The user has provided new information. Determine which fields to update. If the info is a general note, append it to the 'notes' field.
+
+Return ONLY a JSON object with the fields to update. Example: {"notes": "existing notes\\n\\nNew: user said this", "website": "https://example.com"}
+If the info should be appended to notes rather than replacing a field, concatenate it.
+Return {} if nothing should be updated.`,
+      userContent: text,
+      maxTokens: 500,
+      temperature: 0.1,
+    });
+
+    let updates;
+    try {
+      const match = updateResult.match(/\{[\s\S]*\}/);
+      updates = match ? JSON.parse(match[0]) : {};
+    } catch {
+      updates = { notes: (entity.notes ? entity.notes + '\n\n' : '') + text };
+    }
+
+    // Apply updates
+    const validKeys = Object.keys(updates).filter(k => columns.includes(k) && updates[k] !== undefined);
+    if (validKeys.length > 0) {
+      const setClauses = validKeys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+      const values = validKeys.map(k => updates[k]);
+      values.push(entityId);
+      await pool.query(`UPDATE ${table} SET ${setClauses}, updated_at = NOW() WHERE id = $${values.length}`, values);
+    }
+
+    // Also add to knowledge base
+    await pool.query(
+      `INSERT INTO knowledge_entries (source_type, source_id, category, content, confidence_score, is_verified)
+       VALUES ($1, $2, $3, $4, 0.9, true)`,
+      ['user_input', entityId, entityType, `[${entityType}: ${entity.name || entity.title || entity.first_name || entityId}] ${text}`]
+    ).catch(() => {});
+
+    res.json({ ok: true, message: `Updated ${validKeys.length} field${validKeys.length !== 1 ? 's' : ''}. Info absorbed.`, fieldsUpdated: validKeys });
+  } catch (err) {
+    console.error('Smart input error:', err);
+    res.status(500).json({ message: err.message || 'Failed to process input' });
+  }
+});
+
+// Smart Input File — absorb a document into an entity
+router.post('/smart-input-file', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { entity_type, entity_id, sector_id } = req.body;
+    if (!entity_type || !entity_id) return res.status(400).json({ message: 'entity_type and entity_id required' });
+
+    // Save the upload record
+    const { rows: [doc] } = await pool.query(
+      `INSERT INTO uploaded_documents (filename, original_name, mime_type, file_size, file_path, entity_type, entity_id, sector_id, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.file.path,
+       entity_type, entity_id, sector_id || null, req.user.id]
+    );
+
+    // Extract text from file
+    let fileText = '';
+    try {
+      if (req.file.mimetype === 'application/pdf') {
+        const pdf = await import('pdf-parse');
+        const buffer = fs.readFileSync(req.file.path);
+        const data = await pdf.default(buffer);
+        fileText = data.text;
+      } else if (req.file.mimetype.includes('word') || req.file.originalname.endsWith('.docx')) {
+        const mammoth = await import('mammoth');
+        const result = await mammoth.extractRawText({ path: req.file.path });
+        fileText = result.value;
+      } else {
+        fileText = fs.readFileSync(req.file.path, 'utf-8');
+      }
+    } catch {
+      fileText = `[File: ${req.file.originalname}, unable to extract text]`;
+    }
+
+    if (!fileText.trim()) {
+      return res.json({ ok: true, message: 'File uploaded but no text could be extracted.' });
+    }
+
+    // Get entity for context
+    const tableMap = {
+      organisation: 'organisations', contact: 'contacts', cohort: 'cohorts',
+      course: 'courses', engagement: 'service_engagements', funder: 'funders',
+    };
+    const table = tableMap[entity_type];
+    const { rows: [entity] } = table
+      ? await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [entity_id])
+      : { rows: [null] };
+
+    // Claude extracts relevant info
+    const { extractDocumentData } = await import('../services/claude.js');
+    const extraction = await extractDocumentData(fileText.slice(0, 8000), entity_type);
+
+    let extracted;
+    try {
+      const match = extraction.match(/\{[\s\S]*\}/);
+      extracted = match ? JSON.parse(match[0]) : {};
+    } catch {
+      extracted = {};
+    }
+
+    // Apply to entity
+    if (entity && table) {
+      const columns = Object.keys(entity).filter(k => !['id', 'created_at', 'updated_at', 'sector_id'].includes(k));
+      const validKeys = Object.keys(extracted).filter(k => columns.includes(k) && extracted[k]);
+
+      // Always append a note about the upload
+      const noteAddition = `\n\n[Document uploaded: ${req.file.originalname} on ${new Date().toLocaleDateString()}]`;
+      if (columns.includes('notes')) {
+        if (!validKeys.includes('notes')) {
+          extracted.notes = (entity.notes || '') + noteAddition;
+          validKeys.push('notes');
+        } else {
+          extracted.notes = (entity.notes || '') + '\n\n' + extracted.notes + noteAddition;
+        }
+      }
+
+      if (validKeys.length > 0) {
+        const setClauses = validKeys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+        const values = validKeys.map(k => extracted[k]);
+        values.push(entity_id);
+        await pool.query(`UPDATE ${table} SET ${setClauses}, updated_at = NOW() WHERE id = $${values.length}`, values);
+      }
+    }
+
+    // Save extraction to document record
+    await pool.query(
+      'UPDATE uploaded_documents SET ai_extracted_data = $1, text_content = $2 WHERE id = $3',
+      [JSON.stringify(extracted), fileText.slice(0, 10000), doc.id]
+    );
+
+    // Add to knowledge base
+    await pool.query(
+      `INSERT INTO knowledge_entries (source_type, source_id, category, content, confidence_score, is_verified)
+       VALUES ('document_upload', $1, $2, $3, 0.85, false)`,
+      [doc.id, entity_type, `[Document: ${req.file.originalname} for ${entity_type} ${entity?.name || entity?.title || entity_id}]\n${fileText.slice(0, 2000)}`]
+    ).catch(() => {});
+
+    res.json({ ok: true, message: `Document absorbed. ${Object.keys(extracted).length} fields extracted.`, extracted });
+  } catch (err) {
+    console.error('Smart input file error:', err);
+    res.status(500).json({ message: err.message || 'Failed to process file' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await pool.query('DELETE FROM uploaded_documents WHERE id = $1', [req.params.id]);
