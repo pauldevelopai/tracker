@@ -26,6 +26,43 @@ const CATEGORY_COLORS = {
   training_trend: '#3B82F6', framework: '#EC4899',
 };
 
+const BRIEFING_FILTERS = [
+  {
+    key: 'legal',
+    label: 'Legal Cases & Frameworks',
+    color: '#EC4899',
+    categories: ['regulation', 'framework'],
+    keywords: ['legal', 'law', 'court', 'legislation', 'regulation', 'gdpr', 'eu ai act', 'compliance', 'liability', 'lawsuit', 'judgment'],
+  },
+  {
+    key: 'ethics',
+    label: 'Ethics & AI',
+    color: '#8B5CF6',
+    categories: ['opinion'],
+    keywords: ['ethics', 'ethical', 'bias', 'fairness', 'responsible', 'transparency', 'accountability', 'harm', 'trust', 'safety'],
+  },
+  {
+    key: 'security',
+    label: 'Data Security & AI',
+    color: '#F59E0B',
+    categories: [],
+    keywords: ['security', 'privacy', 'breach', 'vulnerability', 'data protection', 'cybersecurity', 'hack', 'phishing', 'encryption', 'gdpr'],
+  },
+  {
+    key: 'workflows',
+    label: 'Workflows & Tools',
+    color: '#10B981',
+    categories: ['ai_tool', 'technique', 'use_case'],
+    keywords: ['workflow', 'tool', 'build', 'automation', 'pipeline', 'integrate', 'productivity', 'agent', 'prompt', 'agentic'],
+  },
+];
+
+function itemMatchesFilter(item, filter) {
+  if (filter.categories.includes(item.category)) return true;
+  const text = `${item.subject || ''} ${item.summary || ''}`.toLowerCase();
+  return filter.keywords.some(kw => text.includes(kw));
+}
+
 export default function NewsletterDigest() {
   const [activeTab, setActiveTab] = useState('digest');
   const [items, setItems] = useState([]);
@@ -84,6 +121,49 @@ export default function NewsletterDigest() {
     if (activeTab === 'digest') loadDigest(); else loadCurriculum();
   }
 
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'email' | 'web'
+  const [storiesPerDay, setStoriesPerDay] = useState(10);
+  const [fetchingWeb, setFetchingWeb] = useState(false);
+
+  function toggleFilter(key) {
+    setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+  }
+
+  function applyFilters(itemList) {
+    let list = itemList;
+    // Source filter
+    if (sourceFilter === 'email') list = list.filter(i => !i.source_type || i.source_type === 'email');
+    else if (sourceFilter === 'web') list = list.filter(i => i.source_type === 'web');
+    // Topic filters
+    if (activeFilters.length > 0) {
+      list = list.filter(item =>
+        activeFilters.some(key => {
+          const filter = BRIEFING_FILTERS.find(f => f.key === key);
+          return filter && itemMatchesFilter(item, filter);
+        })
+      );
+    }
+    return list;
+  }
+
+  async function fetchWebNews() {
+    setFetchingWeb(true);
+    try {
+      const result = await apiFetch('/newsletter/fetch-web', {
+        method: 'POST',
+        body: JSON.stringify({ date: selectedDate }),
+        timeout: 300000,
+      });
+      alert(`Web fetch complete: ${result.inserted} new stories added.`);
+      loadDigest();
+    } catch (err) {
+      alert('Web fetch failed: ' + err.message);
+    } finally {
+      setFetchingWeb(false);
+    }
+  }
+
   const [regenerating, setRegenerating] = useState(false);
   const [editingDigest, setEditingDigest] = useState(false);
   const [editedDigest, setEditedDigest] = useState('');
@@ -134,8 +214,8 @@ export default function NewsletterDigest() {
     try {
       const result = await apiFetch('/newsletter/regenerate-digest', {
         method: 'POST',
-        body: JSON.stringify({ date: selectedDate }),
-        timeout: 300000, // 5 min — AI generation can take a while
+        body: JSON.stringify({ date: selectedDate, storiesLimit: storiesPerDay, sourceFilter }),
+        timeout: 300000,
       });
       setDigest(result.digest);
       loadArchive(); // refresh archive list
@@ -146,8 +226,13 @@ export default function NewsletterDigest() {
     }
   }
 
-  const digestItems = items.filter(i => !i.is_curriculum_relevant);
-  const curriculumInDigest = items.filter(i => i.is_curriculum_relevant);
+  // Apply all filters, then enforce stories-per-day cap (curriculum items take priority)
+  const filteredCurriculum = applyFilters(items.filter(i => i.is_curriculum_relevant));
+  const filteredOther = applyFilters(items.filter(i => !i.is_curriculum_relevant));
+  const totalFiltered = [...filteredCurriculum, ...filteredOther];
+  const cappedTotal = totalFiltered.slice(0, storiesPerDay);
+  const curriculumInDigest = cappedTotal.filter(i => i.is_curriculum_relevant);
+  const digestItems = cappedTotal.filter(i => !i.is_curriculum_relevant);
 
   return (
     <div>
@@ -180,6 +265,60 @@ export default function NewsletterDigest() {
             <button className="btn btn-secondary btn-small" onClick={regenerateDigest} disabled={regenerating}>
               {regenerating ? 'Regenerating...' : 'Regenerate Briefing'}
             </button>
+          </div>
+
+          {/* Source + topic filters + stories control */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16, padding: '12px 14px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
+            {/* Row 1: Source toggles + stories per day + fetch web */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, minWidth: 52 }}>Source:</span>
+              {[['all', 'All'], ['email', 'Email'], ['web', 'Web']].map(([val, label]) => (
+                <button key={val} onClick={() => setSourceFilter(val)} style={{
+                  fontSize: 12, padding: '4px 12px', borderRadius: 16,
+                  border: `1.5px solid ${sourceFilter === val ? 'var(--accent)' : 'var(--border-color)'}`,
+                  background: sourceFilter === val ? 'var(--accent)' : 'transparent',
+                  color: sourceFilter === val ? 'white' : 'var(--text-secondary)',
+                  cursor: 'pointer', fontWeight: sourceFilter === val ? 600 : 400,
+                  transition: 'all 0.15s',
+                }}>{label}</button>
+              ))}
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Stories:</span>
+                <input
+                  type="number" min={3} max={10} value={storiesPerDay}
+                  onChange={e => setStoriesPerDay(Math.min(10, Math.max(3, parseInt(e.target.value) || 3)))}
+                  style={{ width: 52, padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13, textAlign: 'center' }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>per day</span>
+                <button className="btn btn-secondary btn-small" onClick={fetchWebNews} disabled={fetchingWeb} style={{ fontSize: 11, marginLeft: 4 }}>
+                  {fetchingWeb ? 'Fetching...' : '+ Fetch Web'}
+                </button>
+              </div>
+            </div>
+            {/* Row 2: Topic filters */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, minWidth: 52 }}>Topic:</span>
+              {BRIEFING_FILTERS.map(f => {
+                const active = activeFilters.includes(f.key);
+                return (
+                  <button key={f.key} onClick={() => toggleFilter(f.key)} style={{
+                    fontSize: 12, padding: '4px 12px', borderRadius: 16,
+                    border: `1.5px solid ${active ? f.color : 'var(--border-color)'}`,
+                    background: active ? f.color : 'transparent',
+                    color: active ? 'white' : 'var(--text-secondary)',
+                    cursor: 'pointer', fontWeight: active ? 600 : 400,
+                    transition: 'all 0.15s',
+                  }}>{f.label}</button>
+                );
+              })}
+              {activeFilters.length > 0 && (
+                <button onClick={() => setActiveFilters([])} style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 12,
+                  border: '1px solid var(--border-color)', background: 'transparent',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
+                }}>Clear</button>
+              )}
+            </div>
           </div>
 
           {/* Digest summary */}
@@ -258,6 +397,12 @@ export default function NewsletterDigest() {
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                 Run the Newsletter Digest background job from Settings to process your newsletters.
               </p>
+            </div>
+          )}
+          {items.length > 0 && activeFilters.length > 0 && digestItems.length === 0 && curriculumInDigest.length === 0 && (
+            <div className="empty-state">
+              <h3>No items match the selected filters.</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try selecting different filters or clear them to see all items.</p>
             </div>
           )}
         </div>

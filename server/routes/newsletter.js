@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { createKnowledgeEntry } from '../services/knowledge.js';
-import { generateDailyDigest } from '../services/claude.js';
+import { generateDailyDigest, classifyNewsletterContent } from '../services/claude.js';
+import { scrapeSectorNews } from '../services/web-scraper.js';
 
 const router = Router();
 
@@ -124,11 +125,22 @@ router.put('/:id', async (req, res) => {
 router.post('/regenerate-digest', async (req, res) => {
   try {
     const targetDate = req.body.date || new Date().toISOString().split('T')[0];
-    const { rows: items } = await pool.query(
-      'SELECT * FROM newsletter_items WHERE digest_date::date = $1::date ORDER BY is_curriculum_relevant DESC, category',
-      [targetDate]
-    );
-    if (items.length === 0) return res.status(400).json({ message: `No items for ${targetDate} to generate from` });
+    const storiesLimit = Math.min(Math.max(parseInt(req.body.storiesLimit) || 10, 3), 10);
+    const sourceFilter = req.body.sourceFilter || 'all'; // 'all' | 'email' | 'web'
+
+    let itemQuery = 'SELECT * FROM newsletter_items WHERE digest_date::date = $1::date';
+    const params = [targetDate];
+    if (sourceFilter === 'email') { params.push('email'); itemQuery += ` AND source_type = $${params.length}`; }
+    else if (sourceFilter === 'web') { params.push('web'); itemQuery += ` AND source_type = $${params.length}`; }
+    itemQuery += ' ORDER BY is_curriculum_relevant DESC, category';
+
+    const { rows: allItems } = await pool.query(itemQuery, params);
+    if (allItems.length === 0) return res.status(400).json({ message: `No items for ${targetDate} to generate from` });
+
+    // Apply stories limit: curriculum items first, then fill remaining slots
+    const currItems = allItems.filter(i => i.is_curriculum_relevant);
+    const otherItems = allItems.filter(i => !i.is_curriculum_relevant);
+    const items = [...currItems, ...otherItems].slice(0, storiesLimit);
 
     const digest = await generateDailyDigest(items);
 
@@ -180,6 +192,86 @@ router.put('/digest/:date', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Fetch web AI news and store as newsletter items
+router.post('/fetch-web', async (req, res) => {
+  try {
+    const targetDate = req.body.date || new Date().toISOString().split('T')[0];
+
+    // Get sector names for classification context
+    const { rows: sectors } = await pool.query('SELECT name FROM sectors LIMIT 20');
+    const sectorNames = sectors.map(s => s.name).length > 0
+      ? sectors.map(s => s.name)
+      : ['media', 'legal', 'general'];
+
+    // Scrape AI news from web sources
+    const articles = await scrapeSectorNews('general_ai');
+    if (!articles || articles.length === 0) {
+      return res.json({ inserted: 0, message: 'No articles found from web sources' });
+    }
+
+    let inserted = 0;
+    let skipped = 0;
+
+    for (const article of articles) {
+      // Deduplicate by URL (stored as gmail_message_id for web items)
+      const dedupeKey = `web:${article.url}`;
+      const { rows: existing } = await pool.query(
+        'SELECT id FROM newsletter_items WHERE gmail_message_id = $1',
+        [dedupeKey]
+      );
+      if (existing.length > 0) { skipped++; continue; }
+
+      // Classify with Claude
+      const articleText = [article.title, article.description, article.fullText].filter(Boolean).join('\n\n');
+      let classified = [];
+      try {
+        classified = await classifyNewsletterContent(articleText, sectorNames);
+      } catch (e) {
+        // Fallback: store as-is without classification
+        classified = [{
+          title: article.title,
+          summary: article.description || article.title,
+          source_url: article.url,
+          category: 'industry_news',
+          is_curriculum_relevant: false,
+          curriculum_relevance_reason: null,
+          relevant_sectors: [],
+        }];
+      }
+
+      for (const item of classified.slice(0, 3)) { // max 3 items per article
+        await pool.query(
+          `INSERT INTO newsletter_items
+            (gmail_message_id, sender, subject, received_at, raw_text, summary, source_url,
+             category, is_curriculum_relevant, curriculum_relevance_reason, relevant_sectors,
+             digest_date, source_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'web')`,
+          [
+            dedupeKey,
+            article.source,
+            item.title || article.title,
+            article.publishDate ? new Date(article.publishDate) : new Date(),
+            articleText.slice(0, 5000),
+            item.summary,
+            item.source_url || article.url,
+            item.category || 'industry_news',
+            item.is_curriculum_relevant || false,
+            item.curriculum_relevance_reason || null,
+            item.relevant_sectors || [],
+            targetDate,
+          ]
+        );
+        inserted++;
+      }
+    }
+
+    res.json({ inserted, skipped, total: articles.length });
+  } catch (err) {
+    console.error('Web fetch error:', err);
+    res.status(500).json({ message: err.message || 'Web fetch failed' });
   }
 });
 
