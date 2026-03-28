@@ -72,7 +72,7 @@ export default function NewsletterDigest() {
   const [archive, setArchive] = useState([]);
 
   function loadDigest() {
-    apiFetch(`/newsletter/digest/${selectedDate}`).then(d => {
+    return apiFetch(`/newsletter/digest/${selectedDate}`).then(d => {
       setDigest(d.digest);
       setItems(d.items || []);
     }).catch(() => { setDigest(null); setItems([]); });
@@ -203,13 +203,12 @@ export default function NewsletterDigest() {
         });
       }
       const sourceFilter = includeGmail && includeWeb ? 'all' : includeGmail ? 'email' : 'web';
-      const result = await apiFetch('/newsletter/regenerate-digest', {
+      await apiFetch('/newsletter/regenerate-digest', {
         method: 'POST',
         body: JSON.stringify({ date: selectedDate, storiesLimit: storiesPerDay, sourceFilter }),
         timeout: 300000,
       });
-      setDigest(result.digest);
-      loadDigest();
+      await loadDigest();
       loadArchive();
     } catch (err) {
       alert('Generation failed: ' + err.message);

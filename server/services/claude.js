@@ -521,9 +521,10 @@ CRITICAL RULES ON CONTENT:
 - Flag items relevant to AI training curriculum with [CURRICULUM].
 
 CRITICAL RULES ON LINKS:
-- After each item, put the source link on its own line using ONLY this exact format: [Source Name](https://the-actual-url.com)
+- After each item, put the source on its own line using ONLY this exact format: [Source Name](https://the-actual-url.com) — DD Mon YYYY
+- ALWAYS include the publication date (from the input data) after the source link, separated by " — ".
+- If no URL is available, write: Source Name — DD Mon YYYY
 - NEVER output HTML. No angle brackets, no href, no target, no style attributes. ONLY markdown.
-- If no URL is available, just cite the newsletter name and date in parentheses.
 
 CRITICAL RULES ON TONE — WRITE AS PAUL MCNALLY:
 - Paul is the founder of Develop AI. He trains journalists, lawyers, and media professionals to use AI responsibly. He's based in South Africa, works across Africa and with exiled Russian newsrooms.
