@@ -216,21 +216,11 @@ router.post('/fetch-web', async (req, res) => {
     let skipped = 0;
 
     for (const article of articles) {
-      // Deduplicate by URL (stored as gmail_message_id for web items)
-      const dedupeKey = `web:${article.url}`;
-      const { rows: existing } = await pool.query(
-        'SELECT id FROM newsletter_items WHERE gmail_message_id = $1',
-        [dedupeKey]
-      );
-      if (existing.length > 0) { skipped++; continue; }
-
-      // Classify with Claude
       const articleText = [article.title, article.description, article.fullText].filter(Boolean).join('\n\n');
       let classified = [];
       try {
         classified = await classifyNewsletterContent(articleText, sectorNames);
       } catch (e) {
-        // Fallback: store as-is without classification
         classified = [{
           title: article.title,
           summary: article.description || article.title,
@@ -242,13 +232,17 @@ router.post('/fetch-web', async (req, res) => {
         }];
       }
 
-      for (const item of classified.slice(0, 3)) { // max 3 items per article
-        await pool.query(
+      for (let idx = 0; idx < Math.min(classified.length, 3); idx++) {
+        const item = classified[idx];
+        // Unique key per classified item: url + index (so multiple items per article get distinct keys)
+        const dedupeKey = `web:${article.url}:${idx}`;
+        const result = await pool.query(
           `INSERT INTO newsletter_items
             (gmail_message_id, sender, subject, received_at, raw_text, summary, source_url,
              category, is_curriculum_relevant, curriculum_relevance_reason, relevant_sectors,
              digest_date, source_type)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'web')`,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'web')
+           ON CONFLICT (gmail_message_id) DO NOTHING`,
           [
             dedupeKey,
             article.source,
@@ -264,7 +258,7 @@ router.post('/fetch-web', async (req, res) => {
             targetDate,
           ]
         );
-        inserted++;
+        if (result.rowCount > 0) inserted++; else skipped++;
       }
     }
 
