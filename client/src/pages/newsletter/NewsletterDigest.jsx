@@ -122,9 +122,9 @@ export default function NewsletterDigest() {
   }
 
   const [activeFilters, setActiveFilters] = useState([]);
-  const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'email' | 'web'
+  const [includeGmail, setIncludeGmail] = useState(true);
+  const [includeWeb, setIncludeWeb] = useState(false);
   const [storiesPerDay, setStoriesPerDay] = useState(10);
-  const [fetchingWeb, setFetchingWeb] = useState(false);
 
   function toggleFilter(key) {
     setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -132,10 +132,8 @@ export default function NewsletterDigest() {
 
   function applyFilters(itemList) {
     let list = itemList;
-    // Source filter
-    if (sourceFilter === 'email') list = list.filter(i => !i.source_type || i.source_type === 'email');
-    else if (sourceFilter === 'web') list = list.filter(i => i.source_type === 'web');
-    // Topic filters
+    if (includeGmail && !includeWeb) list = list.filter(i => !i.source_type || i.source_type === 'email');
+    else if (!includeGmail && includeWeb) list = list.filter(i => i.source_type === 'web');
     if (activeFilters.length > 0) {
       list = list.filter(item =>
         activeFilters.some(key => {
@@ -145,23 +143,6 @@ export default function NewsletterDigest() {
       );
     }
     return list;
-  }
-
-  async function fetchWebNews() {
-    setFetchingWeb(true);
-    try {
-      const result = await apiFetch('/newsletter/fetch-web', {
-        method: 'POST',
-        body: JSON.stringify({ date: selectedDate }),
-        timeout: 300000,
-      });
-      alert(`Web fetch complete: ${result.inserted} new stories added.`);
-      loadDigest();
-    } catch (err) {
-      alert('Web fetch failed: ' + err.message);
-    } finally {
-      setFetchingWeb(false);
-    }
   }
 
   const [regenerating, setRegenerating] = useState(false);
@@ -210,17 +191,28 @@ export default function NewsletterDigest() {
   }
 
   async function regenerateDigest() {
+    if (!includeGmail && !includeWeb) return alert('Select at least one source (Gmail or Web).');
     setRegenerating(true);
     try {
+      // If web is selected, fetch web news first
+      if (includeWeb) {
+        await apiFetch('/newsletter/fetch-web', {
+          method: 'POST',
+          body: JSON.stringify({ date: selectedDate }),
+          timeout: 300000,
+        });
+      }
+      const sourceFilter = includeGmail && includeWeb ? 'all' : includeGmail ? 'email' : 'web';
       const result = await apiFetch('/newsletter/regenerate-digest', {
         method: 'POST',
         body: JSON.stringify({ date: selectedDate, storiesLimit: storiesPerDay, sourceFilter }),
         timeout: 300000,
       });
       setDigest(result.digest);
-      loadArchive(); // refresh archive list
+      loadDigest();
+      loadArchive();
     } catch (err) {
-      alert('Regeneration failed: ' + err.message);
+      alert('Generation failed: ' + err.message);
     } finally {
       setRegenerating(false);
     }
@@ -255,49 +247,38 @@ export default function NewsletterDigest() {
 
       {activeTab === 'digest' && (
         <div>
-          {/* Date picker + regenerate */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16 }}>
-            <input
-              type="date" value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-              style={{ padding: '6px 10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13 }}
-            />
-            <button className="btn btn-secondary btn-small" onClick={regenerateDigest} disabled={regenerating}>
-              {regenerating ? 'Regenerating...' : 'Regenerate Briefing'}
-            </button>
-          </div>
-
-          {/* Source + topic filters + stories control */}
+          {/* Controls: date, sources, stories, generate */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16, padding: '12px 14px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
-            {/* Row 1: Source toggles + stories per day + fetch web */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, minWidth: 52 }}>Source:</span>
-              {[['all', 'All'], ['email', 'Email'], ['web', 'Web']].map(([val, label]) => (
-                <button key={val} onClick={() => setSourceFilter(val)} style={{
-                  fontSize: 12, padding: '4px 12px', borderRadius: 16,
-                  border: `1.5px solid ${sourceFilter === val ? 'var(--accent)' : 'var(--border-color)'}`,
-                  background: sourceFilter === val ? 'var(--accent)' : 'transparent',
-                  color: sourceFilter === val ? 'white' : 'var(--text-secondary)',
-                  cursor: 'pointer', fontWeight: sourceFilter === val ? 600 : 400,
-                  transition: 'all 0.15s',
-                }}>{label}</button>
+            {/* Row 1: date + sources + stories + generate */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="date" value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                style={{ padding: '5px 10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13 }}
+              />
+              <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Sources:</span>
+              {[['Gmail', includeGmail, setIncludeGmail], ['Web', includeWeb, setIncludeWeb]].map(([label, checked, setter]) => (
+                <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={checked} onChange={e => setter(e.target.checked)}
+                    style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--accent)' }} />
+                  {label}
+                </label>
               ))}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Stories:</span>
-                <input
-                  type="number" min={3} max={10} value={storiesPerDay}
-                  onChange={e => setStoriesPerDay(Math.min(10, Math.max(3, parseInt(e.target.value) || 3)))}
-                  style={{ width: 52, padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13, textAlign: 'center' }}
-                />
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>per day</span>
-                <button className="btn btn-secondary btn-small" onClick={fetchWebNews} disabled={fetchingWeb} style={{ fontSize: 11, marginLeft: 4 }}>
-                  {fetchingWeb ? 'Fetching...' : '+ Fetch Web'}
-                </button>
-              </div>
+              <div style={{ width: 1, height: 20, background: 'var(--border-color)' }} />
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Stories:</span>
+              <input
+                type="number" min={3} max={10} value={storiesPerDay}
+                onChange={e => setStoriesPerDay(Math.min(10, Math.max(3, parseInt(e.target.value) || 3)))}
+                style={{ width: 48, padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13, textAlign: 'center' }}
+              />
+              <button className="btn btn-primary btn-small" onClick={regenerateDigest} disabled={regenerating} style={{ marginLeft: 4 }}>
+                {regenerating ? (includeWeb ? 'Fetching web…' : 'Generating…') : 'Generate Briefing'}
+              </button>
             </div>
             {/* Row 2: Topic filters */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, minWidth: 52 }}>Topic:</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Topic:</span>
               {BRIEFING_FILTERS.map(f => {
                 const active = activeFilters.includes(f.key);
                 return (
