@@ -632,17 +632,56 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate 
                 Court Docs →
               </a>
             )}
-            {c.source_url && c.source_url !== c.case_url && (
-              <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
-                Source →
-              </a>
-            )}
           </div>
+
+          {/* All source articles */}
+          <SourceLinks case_={c} />
 
           {/* Event Timeline */}
           <EventTimeline events={events} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Per-case source article links ────────────────────────────────────────────
+function SourceLinks({ case_: c }) {
+  // Deduplicate: source_urls array + legacy source_url field, excluding case_url (court docs shown separately)
+  const all = [...new Set([
+    ...(c.source_urls || []),
+    c.source_url || null,
+  ].filter(Boolean).filter(u => u !== c.case_url))];
+
+  if (all.length === 0) return null;
+
+  function hostLabel(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch { return url.slice(0, 40); }
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+        Source Articles ({all.length})
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {all.map((url, i) => (
+          <a
+            key={url}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span style={{ fontSize: 10, opacity: 0.5, minWidth: 14 }}>{i + 1}.</span>
+            <span style={{ opacity: 0.6, fontSize: 11 }}>{hostLabel(url)}</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
+            <span style={{ opacity: 0.4, fontSize: 10 }}>↗</span>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }

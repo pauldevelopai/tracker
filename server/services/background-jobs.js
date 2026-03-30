@@ -909,7 +909,7 @@ export async function runLawsuitTracker() {
             const { rows: current } = await pool.query('SELECT status, outcome, next_deadline FROM ai_lawsuits WHERE id = $1', [existing[0].id]);
             const prev = current[0];
 
-            // Update existing case status/deadline
+            // Update existing case status/deadline + append article URL to source list
             await pool.query(
               `UPDATE ai_lawsuits SET
                 status = COALESCE($1, status),
@@ -917,6 +917,11 @@ export async function runLawsuitTracker() {
                 next_deadline = COALESCE($3::date, next_deadline),
                 next_deadline_notes = COALESCE($4, next_deadline_notes),
                 outcome = COALESCE($5, outcome),
+                source_urls = CASE
+                  WHEN $7::text IS NOT NULL AND NOT ($7::text = ANY(COALESCE(source_urls, '{}'::text[])))
+                  THEN COALESCE(source_urls, '{}'::text[]) || $7::text
+                  ELSE source_urls
+                END,
                 last_scraped_at = NOW(),
                 updated_at = NOW()
                WHERE id = $6`,
@@ -927,6 +932,7 @@ export async function runLawsuitTracker() {
                 lawsuit.next_deadline_notes || null,
                 lawsuit.outcome || null,
                 existing[0].id,
+                article.url || null,
               ]
             );
 
@@ -965,13 +971,14 @@ export async function runLawsuitTracker() {
             updateScan({ updatedCases });
           } else {
             // Insert new case
+            const initialSourceUrls = article.url ? [article.url] : [];
             await pool.query(
               `INSERT INTO ai_lawsuits
                 (case_name, plaintiffs, defendants, court, judge, jurisdiction, district, circuit,
                  status, case_type, key_issues, filing_date, last_update, next_deadline,
-                 next_deadline_notes, outcome, settlement_amount, case_url, source_url, summary,
+                 next_deadline_notes, outcome, settlement_amount, case_url, source_url, source_urls, summary,
                  curriculum_relevance, is_curriculum_relevant, last_scraped_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14::date,$15,$16,$17,$18,$19,$20,$21,true,NOW())
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14::date,$15,$16,$17,$18,$19,$20,$21,$22,true,NOW())
                ON CONFLICT (case_name) DO NOTHING`,
               [
                 lawsuit.case_name,
@@ -993,6 +1000,7 @@ export async function runLawsuitTracker() {
                 lawsuit.settlement_amount || null,
                 lawsuit.case_url || article.url,
                 article.url,
+                initialSourceUrls,
                 lawsuit.summary || null,
                 lawsuit.curriculum_relevance || null,
               ]
