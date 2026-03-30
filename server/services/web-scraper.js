@@ -108,6 +108,21 @@ const SECTOR_SOURCES = {
     { url: 'https://www.americanbar.org/groups/centers_commissions/center-for-innovation/', name: 'ABA Innovation', selector: 'article a, h3 a' },
     { url: 'https://legal-tech-blog.de/', name: 'Legal Tech Blog', selector: 'article a, h2 a' },
   ],
+  // AI lawsuit & legal news sources — used by runLawsuitTracker
+  ai_lawsuits: [
+    { url: 'https://chatgptiseatingtheworld.com/', name: 'ChatGPT Is Eating The World', selector: 'article a, h2 a, .entry-title a' },
+    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI Legal', selector: 'article a, h2 a' },
+    { url: 'https://techcrunch.com/category/artificial-intelligence/', name: 'TechCrunch AI', selector: 'article a, h3 a' },
+    { url: 'https://www.reuters.com/legal/litigation/', name: 'Reuters Legal', selector: 'article a, [data-testid="Heading"] a' },
+    { url: 'https://www.courthousenews.com/technology/', name: 'Courthouse News Tech', selector: 'article a, h3 a, .cn-article a' },
+    { url: 'https://arstechnica.com/tech-policy/', name: 'Ars Technica Policy', selector: 'article a, h2 a' },
+    { url: 'https://torrentfreak.com/category/copyright/', name: 'TorrentFreak Copyright', selector: 'article a, h2 a, .post-title a' },
+    { url: 'https://www.law360.com/technology', name: 'Law360 Tech', selector: 'article a, h3 a' },
+    { url: 'https://ipwatchdog.com/', name: 'IP Watchdog', selector: 'article a, .entry-title a, h2 a' },
+    { url: 'https://www.artificialintelligencelaw.com/', name: 'AI Law Review', selector: 'article a, h2 a' },
+    { url: 'https://hollywoodreporter.com/business/business-news/artificial-intelligence/', name: 'Hollywood Reporter AI', selector: 'article a, h3 a' },
+    { url: 'https://variety.com/vip/artificial-intelligence/', name: 'Variety AI', selector: 'article a, h2 a' },
+  ],
   general_ai: [
     // Major AI news
     { url: 'https://www.technologyreview.com/topic/artificial-intelligence/', name: 'MIT Tech Review', selector: 'article a' },
@@ -595,4 +610,83 @@ Return JSON: [{"num": 1, "sector": "media", "potential": "high", "region": "Sout
   }
 
   return unique.slice(0, 30).map(o => ({ ...o, warmth: 'cold', potential: 'unknown' }));
+}
+
+
+// Query CourtListener free API for recent AI-related court filings
+export async function scrapeCourtListener(keywords = ['artificial intelligence', 'generative AI', 'large language model']) {
+  const results = [];
+  for (const keyword of keywords) {
+    try {
+      const { data } = await axios.get('https://www.courtlistener.com/api/rest/v3/search/', {
+        timeout: 15000,
+        headers: { 'User-Agent': USER_AGENT },
+        params: {
+          q: `"${keyword}" copyright`,
+          type: 'r',         // docket entries
+          order_by: 'score desc',
+          filed_after: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        },
+      });
+      if (data?.results?.length) {
+        for (const r of data.results.slice(0, 5)) {
+          results.push({
+            title: r.caseName || r.case_name || '',
+            description: r.snippet || r.description || '',
+            url: r.absolute_url ? `https://www.courtlistener.com${r.absolute_url}` : '',
+            source: 'CourtListener',
+            publishDate: r.dateFiled || r.date_filed || '',
+            court: r.court || '',
+          });
+        }
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (e) {
+      console.log(`[CourtListener] Query failed for "${keyword}": ${e.message}`);
+    }
+  }
+  // Deduplicate by URL
+  const seen = new Set();
+  return results.filter(r => r.url && !seen.has(r.url) && seen.add(r.url));
+}
+
+// Scrape AI lawsuit news from legal sources
+export async function scrapeLawsuitNews() {
+  const sources = SECTOR_SOURCES.ai_lawsuits || [];
+  const allArticles = [];
+  const KEYWORDS = ['lawsuit', 'sued', 'copyright', 'litigation', 'court', 'legal', 'infringement', 'settlement'];
+
+  for (const source of sources) {
+    try {
+      const { data } = await axios.get(source.url, {
+        timeout: TIMEOUT,
+        headers: { 'User-Agent': USER_AGENT },
+        maxRedirects: 3,
+      });
+      const $ = cheerio.load(data);
+      const links = [];
+      $(source.selector).each((_, el) => {
+        const href = $(el).attr('href');
+        const text = $(el).text().trim();
+        if (href && text.length > 10) {
+          const fullUrl = href.startsWith('http') ? href : new URL(href, source.url).href;
+          // Only include if headline mentions AI + legal terms
+          const lower = text.toLowerCase();
+          const hasAI = lower.includes('ai') || lower.includes('artificial intelligence') || lower.includes('openai') || lower.includes('anthropic') || lower.includes('generative');
+          const hasLegal = KEYWORDS.some(k => lower.includes(k));
+          if (hasAI && hasLegal) {
+            links.push({ url: fullUrl, title: text, source: source.name });
+          }
+        }
+      });
+      allArticles.push(...links.slice(0, 4));
+      await new Promise(r => setTimeout(r, 800));
+    } catch (e) {
+      console.log(`[LawsuitScraper] Failed ${source.name}: ${e.message}`);
+    }
+  }
+
+  // Deduplicate
+  const seen = new Set();
+  return allArticles.filter(a => a.url && !seen.has(a.url) && seen.add(a.url));
 }

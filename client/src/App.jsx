@@ -49,6 +49,7 @@ import TrainingMaterials from './pages/curriculum/TrainingMaterials.jsx';
 import LeadsPage from './pages/leads/LeadsPage.jsx';
 import MentoringPage from './pages/mentoring/MentoringPage.jsx';
 import OrganisationMap from './pages/map/OrganisationMap.jsx';
+import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 
 export default function App() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
               <Route path="/curriculum" element={<CoursesList />} />
               <Route path="/curriculum/:id" element={<CourseDetail />} />
               <Route path="/documents" element={<DocumentsList />} />
+              <Route path="/lawsuits" element={<LawsuitTracker />} />
               <Route path="/documents/new" element={<DocumentGenerate />} />
               <Route path="/documents/:id" element={<DocumentDetail />} />
               <Route path="/mentoring" element={<MentoringPage />} />

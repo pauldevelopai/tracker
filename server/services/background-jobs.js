@@ -1,8 +1,9 @@
 import pool from '../db/pool.js';
-import { draftSocialPost, draftColdEmail, researchIndustryTrends, generateBusinessSummary, analyseFeedbackTrends, classifyNewsletterContent, generateDailyDigest } from './claude.js';
+import { draftSocialPost, draftColdEmail, researchIndustryTrends, generateBusinessSummary, analyseFeedbackTrends, classifyNewsletterContent, generateDailyDigest, analyzeLawsuitContent } from './claude.js';
 import { searchEmails, readEmail, getLabelId, getConnectionStatus } from './gmail.js';
 import { createKnowledgeEntry } from './knowledge.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
+import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scraper.js';
 
 // Helper: create a notification for all admin users (broadcast)
 async function notify(type, title, message, link = null) {
@@ -823,7 +824,140 @@ export const JOB_REGISTRY = {
   knowledge_sync: runKnowledgeSync,
   lead_miner: runLeadMiner,
   web_prospector: runWebProspector,
+  lawsuit_tracker: runLawsuitTracker,
 };
+
+// ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──
+export async function runLawsuitTracker() {
+  let newCases = 0;
+  let updatedCases = 0;
+  const errors = [];
+
+  try {
+    // 1. Scrape CourtListener for recent AI copyright filings
+    console.log('[LawsuitTracker] Querying CourtListener...');
+    let courtListenerArticles = [];
+    try {
+      courtListenerArticles = await scrapeCourtListener(['artificial intelligence copyright', 'generative AI copyright', 'AI training data']);
+      console.log(`[LawsuitTracker] CourtListener returned ${courtListenerArticles.length} results`);
+    } catch (e) {
+      errors.push(`CourtListener: ${e.message}`);
+    }
+
+    // 2. Scrape AI lawsuit news from legal sources
+    console.log('[LawsuitTracker] Scraping legal news sources...');
+    let newsArticles = [];
+    try {
+      newsArticles = await scrapeLawsuitNews();
+      console.log(`[LawsuitTracker] Found ${newsArticles.length} relevant articles`);
+    } catch (e) {
+      errors.push(`News scrape: ${e.message}`);
+    }
+
+    // 3. Deep-scrape article text then use Claude to extract lawsuit data
+    const allSources = [
+      ...courtListenerArticles.slice(0, 8),
+      ...newsArticles.slice(0, 10),
+    ];
+
+    for (const article of allSources) {
+      try {
+        let fullText = [article.title, article.description, article.text].filter(Boolean).join('\n\n');
+        if (!fullText || fullText.length < 100) {
+          const scraped = await scrapeArticle(article.url);
+          if (scraped.success) fullText = [scraped.title, scraped.description, scraped.text].join('\n\n');
+        }
+        if (!fullText || fullText.length < 100) continue;
+
+        const extracted = await analyzeLawsuitContent(fullText);
+        if (!extracted || extracted.length === 0) continue;
+
+        for (const lawsuit of extracted) {
+          if (!lawsuit.case_name || lawsuit.case_name.length < 5) continue;
+
+          // Try to match existing case by name similarity
+          const { rows: existing } = await pool.query(
+            `SELECT id FROM ai_lawsuits WHERE LOWER(case_name) = LOWER($1) OR LOWER(case_name) LIKE LOWER($2) LIMIT 1`,
+            [lawsuit.case_name, `%${lawsuit.case_name.replace(/[^a-zA-Z0-9 ]/g, '%')}%`]
+          );
+
+          if (existing.length > 0) {
+            // Update existing case status/deadline
+            await pool.query(
+              `UPDATE ai_lawsuits SET
+                status = COALESCE($1, status),
+                last_update = COALESCE($2::date, last_update),
+                next_deadline = COALESCE($3::date, next_deadline),
+                next_deadline_notes = COALESCE($4, next_deadline_notes),
+                outcome = COALESCE($5, outcome),
+                last_scraped_at = NOW(),
+                updated_at = NOW()
+               WHERE id = $6`,
+              [
+                lawsuit.status || null,
+                lawsuit.last_update || null,
+                lawsuit.next_deadline || null,
+                lawsuit.next_deadline_notes || null,
+                lawsuit.outcome || null,
+                existing[0].id,
+              ]
+            );
+            updatedCases++;
+          } else {
+            // Insert new case
+            await pool.query(
+              `INSERT INTO ai_lawsuits
+                (case_name, plaintiffs, defendants, court, judge, jurisdiction, district, circuit,
+                 status, case_type, key_issues, filing_date, last_update, next_deadline,
+                 next_deadline_notes, outcome, settlement_amount, case_url, source_url, summary,
+                 curriculum_relevance, is_curriculum_relevant, last_scraped_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14::date,$15,$16,$17,$18,$19,$20,$21,true,NOW())
+               ON CONFLICT (case_name) DO NOTHING`,
+              [
+                lawsuit.case_name,
+                lawsuit.plaintiffs || [],
+                lawsuit.defendants || [],
+                lawsuit.court || null,
+                lawsuit.judge || null,
+                lawsuit.jurisdiction || 'US Federal',
+                lawsuit.district || null,
+                lawsuit.circuit || null,
+                lawsuit.status || 'active',
+                lawsuit.case_type || 'copyright',
+                lawsuit.key_issues || [],
+                lawsuit.filing_date || null,
+                lawsuit.last_update || null,
+                lawsuit.next_deadline || null,
+                lawsuit.next_deadline_notes || null,
+                lawsuit.outcome || null,
+                lawsuit.settlement_amount || null,
+                lawsuit.case_url || article.url,
+                article.url,
+                lawsuit.summary || null,
+                lawsuit.curriculum_relevance || null,
+              ]
+            );
+            newCases++;
+          }
+        }
+      } catch (e) {
+        errors.push(`Article ${article.url}: ${e.message}`);
+      }
+    }
+
+    const summary = `Lawsuit tracker: ${newCases} new cases added, ${updatedCases} updated. Scanned ${allSources.length} sources.${errors.length > 0 ? ` Errors: ${errors.slice(0, 3).join('; ')}` : ''}`;
+    console.log(`[LawsuitTracker] ${summary}`);
+
+    if (newCases > 0) {
+      await notify('info', 'AI Lawsuit Tracker Updated', `${newCases} new AI lawsuit${newCases > 1 ? 's' : ''} found. ${updatedCases} existing cases updated.`, '/lawsuits');
+    }
+
+    return { result: summary, itemsProcessed: newCases + updatedCases };
+  } catch (err) {
+    console.error('[LawsuitTracker] Fatal error:', err);
+    return { result: `Lawsuit tracker failed: ${err.message}`, itemsProcessed: 0 };
+  }
+}
 
 // Lead Miner — scans Gmail for potential leads and organisations
 export async function runLeadMiner() {

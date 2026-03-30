@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useSectors } from '../context/SectorContext.jsx';
 import NotificationBell from './NotificationBell.jsx';
 
-const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach']);
+const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits']);
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '~' },
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
   { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
+  { to: '/lawsuits', label: 'AI Lawsuit Tracker', icon: '~', group: 'Compliance' },
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },

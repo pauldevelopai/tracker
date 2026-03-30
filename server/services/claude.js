@@ -543,6 +543,54 @@ CRITICAL RULES ON TONE — WRITE AS PAUL MCNALLY:
 }
 
 /**
+ * Extract AI lawsuit data from scraped article/document text.
+ * Returns an array of structured lawsuit objects for upsert into ai_lawsuits.
+ */
+export async function analyzeLawsuitContent(text) {
+  const result = await callClaude({
+    system: `You are a legal analyst specialising in AI copyright and technology litigation. Extract structured lawsuit data from the provided text.
+
+Return ONLY valid JSON — an array of lawsuit objects. Each object must have these fields:
+- case_name: string — formal case name e.g. "New York Times v. OpenAI"
+- plaintiffs: string[] — list of plaintiff names
+- defendants: string[] — list of defendant names
+- court: string — court name e.g. "US District Court", "Court of Appeal"
+- judge: string or null
+- jurisdiction: string — one of "US Federal", "US State", "EU", "UK", "International"
+- district: string or null — e.g. "N.D. Cal.", "S.D.N.Y."
+- circuit: string or null — e.g. "9th Circuit"
+- status: string — one of "active", "settled", "dismissed", "appealing", "decided"
+- case_type: string — one of "copyright", "privacy", "defamation", "labour", "contract", "other"
+- key_issues: string[] — 2-5 specific legal issues raised
+- filing_date: string or null — ISO date "YYYY-MM-DD"
+- last_update: string — ISO date of most recent development
+- next_deadline: string or null — ISO date
+- next_deadline_notes: string or null — description of what the deadline is
+- outcome: string or null — for settled/dismissed/decided cases
+- settlement_amount: string or null — e.g. "$1,500,000"
+- case_url: string or null — URL to court documents or primary source
+- summary: string — 2-3 sentence factual summary
+- curriculum_relevance: string or null — why this is relevant to AI training courses
+
+Only extract cases that are clearly AI-related (AI training data, AI-generated content, AI tools). Return [] if no AI lawsuits found.`,
+    userContent: text.slice(0, 15000),
+    maxTokens: 4000,
+    temperature: 0.1,
+  });
+
+  try {
+    const parsed = JSON.parse(result);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    const match = result.match(/\[[\s\S]*\]/);
+    if (match) {
+      try { return JSON.parse(match[0]); } catch { return []; }
+    }
+    return [];
+  }
+}
+
+/**
  * Generate personalised learning tasks for a participant.
  */
 export async function generatePersonalisedTasks(contact, organisation, course, outcomes, skillLevel) {
