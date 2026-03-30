@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { runLawsuitTracker } from '../services/background-jobs.js';
+import { scanState } from '../services/scan-state.js';
 
 const router = Router();
 
@@ -32,7 +33,8 @@ router.get('/', async (req, res) => {
       query += ` AND (case_name ILIKE $${params.length} OR summary ILIKE $${params.length} OR EXISTS (SELECT 1 FROM unnest(defendants) d WHERE d ILIKE $${params.length}) OR EXISTS (SELECT 1 FROM unnest(plaintiffs) p WHERE p ILIKE $${params.length}))`;
     }
 
-    query += ' ORDER BY CASE WHEN status = \'active\' THEN 0 WHEN status = \'appealing\' THEN 1 ELSE 2 END, updated_at DESC';
+    // Sort by most recent legal activity first (last_update = real-world legal date, fallback to system updated_at)
+    query += ' ORDER BY COALESCE(last_update, updated_at::date) DESC NULLS LAST, updated_at DESC';
 
     const { rows } = await pool.query(query, params);
     res.json(rows);
@@ -67,16 +69,16 @@ router.get('/stats', async (req, res) => {
       LIMIT 8
     `);
 
-    // Upcoming deadlines
-    const { rows: deadlines } = await pool.query(`
-      SELECT id, case_name, next_deadline, next_deadline_notes, status
+    // Most recently updated cases
+    const { rows: recentlyUpdated } = await pool.query(`
+      SELECT id, case_name, last_update, updated_at, status, case_type, last_scraped_at,
+             next_deadline, next_deadline_notes
       FROM ai_lawsuits
-      WHERE next_deadline IS NOT NULL AND next_deadline >= CURRENT_DATE AND status IN ('active', 'appealing')
-      ORDER BY next_deadline ASC
+      ORDER BY COALESCE(last_update, updated_at::date) DESC NULLS LAST, updated_at DESC
       LIMIT 5
     `);
 
-    res.json({ ...rows[0], defendants, deadlines });
+    res.json({ ...rows[0], defendants, recentlyUpdated });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });
@@ -193,15 +195,19 @@ router.post('/:id/events', async (req, res) => {
   }
 });
 
-// Trigger the lawsuit tracker background job manually
-router.post('/refresh', async (req, res) => {
-  try {
-    const result = await runLawsuitTracker();
-    res.json(result);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message || 'Refresh failed' });
+// Live scan progress — polled by the frontend every 1.5s while running
+router.get('/scan-status', (req, res) => {
+  res.json(scanState);
+});
+
+// Trigger the lawsuit tracker background job — fire-and-forget so the client can poll /scan-status
+router.post('/refresh', (req, res) => {
+  if (scanState.running) {
+    return res.json({ started: false, message: 'Scan already in progress' });
   }
+  // Start in background; client polls /scan-status for live updates
+  runLawsuitTracker().catch(err => console.error('[LawsuitTracker] Fatal:', err));
+  res.json({ started: true, message: 'Scan started' });
 });
 
 export default router;

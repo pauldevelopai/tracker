@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch } from '../../hooks/useApi.js';
 import PageHeader from '../../components/PageHeader.jsx';
 import AiBadge from '../../components/AiBadge.jsx';
@@ -32,6 +32,17 @@ const EVENT_TYPE_STYLES = {
   update:     { color: '#64748B', icon: '•' },
 };
 
+const PHASE_LABELS = {
+  starting:      'Initialising',
+  courtlistener: 'CourtListener API',
+  news:          'News sources',
+  analysing:     'AI analysis',
+  saving:        'Saving to database',
+  done:          'Complete',
+  error:         'Error',
+  idle:          '',
+};
+
 function StatusBadge({ status }) {
   const s = STATUS_COLORS[status] || STATUS_COLORS.active;
   return (
@@ -55,29 +66,133 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function daysUntil(d) {
-  if (!d) return null;
-  return Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
+function formatElapsed(ms) {
+  if (!ms) return '0s';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+function timeAgo(d) {
+  if (!d) return null;
+  const diff = Date.now() - new Date(d).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+// ─── Scan progress banner ──────────────────────────────────────────────────────
+function ScanBanner({ scanStatus, elapsed, onDismiss }) {
+  if (!scanStatus || scanStatus.phase === 'idle') return null;
+
+  const isDone  = scanStatus.phase === 'done';
+  const isError = scanStatus.phase === 'error';
+  const isRunning = scanStatus.running;
+
+  const progress = scanStatus.articlesTotal > 0
+    ? Math.round((scanStatus.articlesDone / scanStatus.articlesTotal) * 100)
+    : null;
+
+  const bg    = isDone ? '#D1FAE5' : isError ? '#FEE2E2' : '#EFF6FF';
+  const border= isDone ? '#6EE7B7' : isError ? '#FECACA' : '#BFDBFE';
+  const color = isDone ? '#065F46' : isError ? '#991B1B' : '#1D4ED8';
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: '14px 16px', borderRadius: 8, fontSize: 13,
+      background: bg, border: `1px solid ${border}`, color,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        {/* Left: status */}
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            {isRunning && (
+              <span style={{
+                display: 'inline-block', width: 10, height: 10, borderRadius: '50%',
+                background: '#3B82F6', animation: 'pulse 1.2s ease-in-out infinite',
+              }} />
+            )}
+            {isDone && <span style={{ fontSize: 15 }}>✓</span>}
+            {isError && <span style={{ fontSize: 15 }}>⚠</span>}
+            <span style={{ fontWeight: 700 }}>
+              {isDone ? 'Scan complete' : isError ? 'Scan error' : `Scanning — ${PHASE_LABELS[scanStatus.phase] || scanStatus.phase}`}
+            </span>
+            {(isRunning || isDone) && (
+              <span style={{ fontSize: 11, opacity: 0.7 }}>⏱ {formatElapsed(elapsed)}</span>
+            )}
+          </div>
+
+          <div style={{ fontSize: 12, opacity: 0.85, marginBottom: progress !== null ? 8 : 0, lineHeight: 1.4 }}>
+            {scanStatus.step}
+          </div>
+
+          {/* Article progress bar */}
+          {isRunning && progress !== null && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.7, marginBottom: 4 }}>
+                <span>Source {scanStatus.articlesDone} of {scanStatus.articlesTotal}</span>
+                <span>{progress}%</span>
+              </div>
+              <div style={{ background: '#BFDBFE', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 4, background: '#3B82F6',
+                  width: `${progress}%`, transition: 'width 0.5s ease',
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Running tally */}
+          {isRunning && (scanStatus.newCases > 0 || scanStatus.updatedCases > 0) && (
+            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.75 }}>
+              {scanStatus.newCases > 0 && <span style={{ marginRight: 12 }}>✦ {scanStatus.newCases} new case{scanStatus.newCases !== 1 ? 's' : ''} found</span>}
+              {scanStatus.updatedCases > 0 && <span>{scanStatus.updatedCases} updated</span>}
+            </div>
+          )}
+
+          {/* Final result */}
+          {(isDone || isError) && scanStatus.lastResult && (
+            <div style={{ marginTop: 4, fontSize: 12, fontWeight: 600 }}>{scanStatus.lastResult}</div>
+          )}
+        </div>
+
+        {/* Dismiss button (only when not running) */}
+        {!isRunning && (
+          <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, opacity: 0.4, padding: 0, lineHeight: 1 }}>×</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function LawsuitTracker() {
   const [cases, setCases] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState(null);
   const [events, setEvents] = useState({});   // { caseId: [...events] }
-  const [refreshMsg, setRefreshMsg] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDefendant, setFilterDefendant] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [search, setSearch] = useState('');
 
-  // Refs so deadline chips can scroll to the right card
+  // Live scan state
+  const [scanStatus, setScanStatus] = useState(null);
+  const [scanElapsed, setScanElapsed] = useState(0);
+  const pollRef = useRef(null);
+  const elapsedRef = useRef(null);
+
+  // Refs so recently-updated chips can scroll to the right card
   const cardRefs = useRef({});
 
-  function loadAll() {
+  // ─── Data loading ───────────────────────────────────────────────────────────
+  const loadAll = useCallback(() => {
     const params = new URLSearchParams();
     if (filterStatus !== 'all') params.set('status', filterStatus);
     if (filterDefendant) params.set('defendant', filterDefendant);
@@ -91,9 +206,9 @@ export default function LawsuitTracker() {
       setCases(c);
       setStats(s);
     }).catch(() => {}).finally(() => setLoading(false));
-  }
+  }, [filterStatus, filterDefendant, filterType, search]);
 
-  useEffect(() => { loadAll(); }, [filterStatus, filterDefendant, filterType, search]);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   // Lazy-load events when a case is expanded
   useEffect(() => {
@@ -103,51 +218,103 @@ export default function LawsuitTracker() {
       .catch(() => setEvents(prev => ({ ...prev, [selected]: [] })));
   }, [selected]);
 
+  // ─── Scan polling ───────────────────────────────────────────────────────────
+  function startPolling() {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await apiFetch('/lawsuits/scan-status');
+        setScanStatus(s);
+        if (s.startedAt) {
+          setScanElapsed(Date.now() - s.startedAt);
+        }
+        if (!s.running) {
+          stopPolling();
+          // Refresh case list when scan finishes
+          loadAll();
+        }
+      } catch {}
+    }, 1500);
+  }
+
+  function stopPolling() {
+    clearInterval(pollRef.current);
+    pollRef.current = null;
+    clearInterval(elapsedRef.current);
+    elapsedRef.current = null;
+  }
+
+  // Tick elapsed every second while running
+  useEffect(() => {
+    if (scanStatus?.running && scanStatus.startedAt) {
+      if (!elapsedRef.current) {
+        elapsedRef.current = setInterval(() => {
+          setScanElapsed(Date.now() - scanStatus.startedAt);
+        }, 1000);
+      }
+    } else {
+      clearInterval(elapsedRef.current);
+      elapsedRef.current = null;
+    }
+    return () => clearInterval(elapsedRef.current);
+  }, [scanStatus?.running, scanStatus?.startedAt]);
+
+  useEffect(() => () => stopPolling(), []);
+
+  // ─── Actions ────────────────────────────────────────────────────────────────
+  async function refresh() {
+    try {
+      const r = await apiFetch('/lawsuits/refresh', { method: 'POST' });
+      if (r.started) {
+        setScanStatus({ running: true, phase: 'starting', step: 'Initialising scan…', newCases: 0, updatedCases: 0, articlesDone: 0, articlesTotal: 0, startedAt: Date.now() });
+        setScanElapsed(0);
+        startPolling();
+      } else {
+        // Already running — just start polling to show progress
+        startPolling();
+      }
+    } catch (err) {
+      setScanStatus({ running: false, phase: 'error', step: `Failed to start: ${err.message}`, startedAt: null });
+    }
+  }
+
   function selectAndScroll(id) {
     setSelected(prev => prev === id ? null : id);
-    // Small delay to let React render the expanded card before scrolling
     setTimeout(() => {
       cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 80);
   }
 
-  async function refresh() {
-    setRefreshing(true);
-    setRefreshMsg(null);
-    try {
-      const r = await apiFetch('/lawsuits/refresh', { method: 'POST', timeout: 300000 });
-      setRefreshMsg({ type: 'success', text: r.result || 'Refresh complete' });
-      await loadAll();
-    } catch (err) {
-      setRefreshMsg({ type: 'error', text: 'Refresh failed: ' + err.message });
-    } finally {
-      setRefreshing(false);
-      setTimeout(() => setRefreshMsg(null), 12000);
-    }
-  }
+  const isScanning = scanStatus?.running;
 
   return (
     <div>
+      {/* Pulse animation keyframes */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
+        }
+      `}</style>
+
       <PageHeader title="AI Lawsuit Tracker">
         <AiBadge />
-        <button className="btn btn-secondary btn-small" onClick={refresh} disabled={refreshing} style={{ fontSize: 11 }}>
-          {refreshing ? 'Scanning sources…' : '↻ Refresh Cases'}
+        <button
+          className="btn btn-secondary btn-small"
+          onClick={isScanning ? undefined : refresh}
+          disabled={isScanning}
+          style={{ fontSize: 11, opacity: isScanning ? 0.6 : 1 }}
+        >
+          {isScanning ? '● Scanning…' : '↻ Scan Sources'}
         </button>
       </PageHeader>
 
-      {/* Refresh status banner */}
-      {refreshMsg && (
-        <div style={{
-          marginBottom: 16, padding: '10px 14px', borderRadius: 6, fontSize: 13,
-          background: refreshMsg.type === 'success' ? '#D1FAE5' : '#FEE2E2',
-          color: refreshMsg.type === 'success' ? '#065F46' : '#991B1B',
-          border: `1px solid ${refreshMsg.type === 'success' ? '#6EE7B7' : '#FECACA'}`,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span>{refreshMsg.type === 'success' ? '✓ ' : '⚠ '}{refreshMsg.text}</span>
-          <button onClick={() => setRefreshMsg(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, opacity: 0.5 }}>×</button>
-        </div>
-      )}
+      {/* Live scan progress banner */}
+      <ScanBanner
+        scanStatus={scanStatus}
+        elapsed={scanElapsed}
+        onDismiss={() => setScanStatus(null)}
+      />
 
       {/* Stats bar */}
       {stats && (
@@ -167,32 +334,34 @@ export default function LawsuitTracker() {
         </div>
       )}
 
-      {/* Upcoming deadlines — clicking expands + scrolls to the case */}
-      {stats?.deadlines?.length > 0 && (
-        <div className="card" style={{ marginBottom: 16, padding: '12px 16px', borderLeft: '3px solid #EF4444' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#EF4444', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>⏱ Upcoming Deadlines</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {stats.deadlines.map(d => {
-              const days = daysUntil(d.next_deadline);
-              const urgent = days !== null && days <= 30;
-              const isOpen = selected === d.id;
+      {/* Recently updated — clicking scrolls to and expands the case */}
+      {stats?.recentlyUpdated?.length > 0 && (
+        <div className="card" style={{ marginBottom: 16, padding: '12px 16px', borderLeft: '3px solid #6366F1' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#6366F1', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            🕐 Recently Updated
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {stats.recentlyUpdated.map(c => {
+              const isOpen = selected === c.id;
+              const when = timeAgo(c.last_update || c.updated_at);
               return (
                 <div
-                  key={d.id}
-                  onClick={() => selectAndScroll(d.id)}
+                  key={c.id}
+                  onClick={() => selectAndScroll(c.id)}
                   style={{
-                    cursor: 'pointer', fontSize: 12, padding: '6px 12px', borderRadius: 6,
-                    border: `1.5px solid ${isOpen ? '#6366F1' : urgent ? '#FECACA' : 'var(--border-color)'}`,
-                    background: isOpen ? '#EEF2FF' : urgent ? '#FEF2F2' : 'var(--card-bg)',
-                    transition: 'all 0.15s',
+                    cursor: 'pointer', fontSize: 12, padding: '7px 12px', borderRadius: 6,
+                    border: `1.5px solid ${isOpen ? '#6366F1' : 'var(--border-color)'}`,
+                    background: isOpen ? '#EEF2FF' : 'var(--card-bg)',
+                    transition: 'all 0.15s', maxWidth: 240,
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>{d.case_name.length > 35 ? d.case_name.slice(0, 35) + '…' : d.case_name}</span>
-                  <span style={{ color: urgent ? '#EF4444' : 'var(--text-secondary)', marginLeft: 6 }}>
-                    {formatDate(d.next_deadline)}{days !== null && ` (${days}d)`}
-                  </span>
-                  {d.next_deadline_notes && <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 2 }}>{d.next_deadline_notes}</div>}
-                  <div style={{ fontSize: 10, color: '#6366F1', marginTop: 2 }}>↓ click to expand</div>
+                  <div style={{ fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.case_name.length > 38 ? c.case_name.slice(0, 38) + '…' : c.case_name}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <StatusBadge status={c.status} />
+                    {when && <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{when}</span>}
+                  </div>
                 </div>
               );
             })}
@@ -241,7 +410,7 @@ export default function LawsuitTracker() {
           <option value="other">Other</option>
         </select>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 4 }}>
-          {cases.length} case{cases.length !== 1 ? 's' : ''} {filterStatus !== 'all' || filterDefendant || filterType !== 'all' || search ? '(filtered)' : ''}
+          {cases.length} case{cases.length !== 1 ? 's' : ''}{filterStatus !== 'all' || filterDefendant || filterType !== 'all' || search ? ' (filtered)' : ''}
         </span>
       </div>
 
@@ -250,11 +419,11 @@ export default function LawsuitTracker() {
       {!loading && cases.length === 0 && (
         <div className="empty-state">
           <h3>No cases found.</h3>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try adjusting your filters, or click Refresh Cases to scan for new litigation.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try adjusting your filters, or click Scan Sources to search for new litigation.</p>
         </div>
       )}
 
-      {/* Case list */}
+      {/* Case list — ordered by most recent activity */}
       {!loading && cases.map(c => (
         <CaseCard
           key={c.id}
@@ -269,10 +438,8 @@ export default function LawsuitTracker() {
   );
 }
 
+// ─── Case card ─────────────────────────────────────────────────────────────────
 function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
-  const deadline = c.next_deadline ? daysUntil(c.next_deadline) : null;
-  const deadlineUrgent = deadline !== null && deadline <= 30 && (c.status === 'active' || c.status === 'appealing');
-
   return (
     <div
       ref={cardRef}
@@ -323,6 +490,7 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
 
         <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>
           {c.filing_date && <div>Filed {formatDate(c.filing_date)}</div>}
+          {c.last_update && <div style={{ marginTop: 2 }}>Updated {timeAgo(c.last_update)}</div>}
           {c.judge && <div style={{ marginTop: 2 }}>Judge {c.judge}</div>}
           {c.settlement_amount && <div style={{ marginTop: 2, color: '#065F46', fontWeight: 600 }}>{c.settlement_amount}</div>}
           <div style={{ marginTop: 4, fontSize: 10, color: '#6366F1' }}>{selected ? '▲ collapse' : '▼ expand'}</div>
@@ -339,15 +507,14 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
             {c.court && <DetailField label="Court" value={c.court} />}
             {c.district && <DetailField label="District/Circuit" value={`${c.district}${c.circuit ? ` · ${c.circuit}` : ''}`} />}
-            {c.last_update && <DetailField label="Last Update" value={formatDate(c.last_update)} />}
+            {c.last_update && <DetailField label="Last Legal Update" value={formatDate(c.last_update)} />}
             {c.outcome && <DetailField label="Outcome" value={c.outcome} />}
           </div>
 
           {c.next_deadline && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: deadlineUrgent ? '#FEF2F2' : '#EFF6FF', border: `1px solid ${deadlineUrgent ? '#FECACA' : '#BFDBFE'}` }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: deadlineUrgent ? '#EF4444' : '#1D4ED8' }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#1D4ED8' }}>
                 Next: {c.next_deadline_notes || 'Deadline'} — {formatDate(c.next_deadline)}
-                {deadline !== null && ` (${deadline > 0 ? `in ${deadline} days` : 'past'})`}
               </span>
             </div>
           )}
@@ -372,14 +539,15 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
           </div>
 
           {/* Event Timeline */}
-          <EventTimeline events={events} caseId={c.id} />
+          <EventTimeline events={events} />
         </div>
       )}
     </div>
   );
 }
 
-function EventTimeline({ events, caseId }) {
+// ─── Timeline ──────────────────────────────────────────────────────────────────
+function EventTimeline({ events }) {
   if (!events) {
     return (
       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
@@ -393,7 +561,7 @@ function EventTimeline({ events, caseId }) {
     return (
       <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Case History</div>
-        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No events recorded yet. Refresh to scan for updates.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No events recorded yet. Click Scan Sources to check for updates.</div>
       </div>
     );
   }
@@ -411,7 +579,6 @@ function EventTimeline({ events, caseId }) {
           const style = EVENT_TYPE_STYLES[ev.event_type] || EVENT_TYPE_STYLES.update;
           return (
             <div key={ev.id} style={{ position: 'relative', marginBottom: i < events.length - 1 ? 16 : 0 }}>
-              {/* dot */}
               <div style={{
                 position: 'absolute', left: -20, top: 2,
                 width: 14, height: 14, borderRadius: '50%',

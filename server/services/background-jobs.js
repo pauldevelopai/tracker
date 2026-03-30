@@ -4,6 +4,7 @@ import { searchEmails, readEmail, getLabelId, getConnectionStatus } from './gmai
 import { createKnowledgeEntry } from './knowledge.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
 import { scrapeLawsuitNews, scrapeCourtListener, scrapeArticle } from './web-scraper.js';
+import { startScan, finishScan, updateScan } from './scan-state.js';
 
 // Helper: create a notification for all admin users (broadcast)
 async function notify(type, title, message, link = null) {
@@ -833,25 +834,33 @@ export async function runLawsuitTracker() {
   let updatedCases = 0;
   const errors = [];
 
+  startScan();
+
   try {
     // 1. Scrape CourtListener for recent AI copyright filings
+    updateScan({ phase: 'courtlistener', step: 'Querying CourtListener API for recent AI filings…' });
     console.log('[LawsuitTracker] Querying CourtListener...');
     let courtListenerArticles = [];
     try {
       courtListenerArticles = await scrapeCourtListener(['artificial intelligence copyright', 'generative AI copyright', 'AI training data']);
       console.log(`[LawsuitTracker] CourtListener returned ${courtListenerArticles.length} results`);
+      updateScan({ step: `CourtListener: ${courtListenerArticles.length} filings found` });
     } catch (e) {
       errors.push(`CourtListener: ${e.message}`);
+      updateScan({ step: `CourtListener unavailable — continuing with news sources` });
     }
 
     // 2. Scrape AI lawsuit news from legal sources
+    updateScan({ phase: 'news', step: 'Scanning legal news sources and RSS feeds…' });
     console.log('[LawsuitTracker] Scraping legal news sources...');
     let newsArticles = [];
     try {
       newsArticles = await scrapeLawsuitNews();
       console.log(`[LawsuitTracker] Found ${newsArticles.length} relevant articles`);
+      updateScan({ step: `News scan complete — ${newsArticles.length} relevant articles found` });
     } catch (e) {
       errors.push(`News scrape: ${e.message}`);
+      updateScan({ step: `News scan error: ${e.message}` });
     }
 
     // 3. Deep-scrape article text then use Claude to extract lawsuit data
@@ -860,14 +869,26 @@ export async function runLawsuitTracker() {
       ...newsArticles.slice(0, 10),
     ];
 
+    updateScan({ phase: 'analysing', articlesTotal: allSources.length, articlesDone: 0, step: `Analysing ${allSources.length} sources with AI…` });
+
     for (const article of allSources) {
       try {
+        const articleNum = allSources.indexOf(article) + 1;
+        const shortTitle = (article.title || article.url || 'unknown').slice(0, 55);
+        updateScan({
+          step: `Analysing source ${articleNum} of ${allSources.length}: ${shortTitle}`,
+          articlesDone: articleNum - 1,
+        });
+
         let fullText = [article.title, article.description, article.text].filter(Boolean).join('\n\n');
         if (!fullText || fullText.length < 100) {
           const scraped = await scrapeArticle(article.url);
           if (scraped.success) fullText = [scraped.title, scraped.description, scraped.text].join('\n\n');
         }
-        if (!fullText || fullText.length < 100) continue;
+        if (!fullText || fullText.length < 100) {
+          updateScan({ articlesDone: articleNum });
+          continue;
+        }
 
         const extracted = await analyzeLawsuitContent(fullText);
         if (!extracted || extracted.length === 0) continue;
@@ -880,6 +901,8 @@ export async function runLawsuitTracker() {
             `SELECT id FROM ai_lawsuits WHERE LOWER(case_name) = LOWER($1) OR LOWER(case_name) LIKE LOWER($2) LIMIT 1`,
             [lawsuit.case_name, `%${lawsuit.case_name.replace(/[^a-zA-Z0-9 ]/g, '%')}%`]
           );
+
+          updateScan({ phase: 'saving', step: `Saving: ${lawsuit.case_name.slice(0, 50)}…` });
 
           if (existing.length > 0) {
             // Fetch current state to detect changes
@@ -939,6 +962,7 @@ export async function runLawsuitTracker() {
               );
             }
             updatedCases++;
+            updateScan({ updatedCases });
           } else {
             // Insert new case
             await pool.query(
@@ -989,15 +1013,19 @@ export async function runLawsuitTracker() {
               );
             }
             newCases++;
+            updateScan({ newCases });
           }
         }
       } catch (e) {
         errors.push(`Article ${article.url}: ${e.message}`);
+        updateScan({ articlesDone: allSources.indexOf(article) + 1 });
       }
     }
 
-    const summary = `Lawsuit tracker: ${newCases} new cases added, ${updatedCases} updated. Scanned ${allSources.length} sources.${errors.length > 0 ? ` Errors: ${errors.slice(0, 3).join('; ')}` : ''}`;
+    const summary = `Scan complete — ${newCases} new case${newCases !== 1 ? 's' : ''} added, ${updatedCases} updated. Scanned ${allSources.length} sources.${errors.length > 0 ? ` (${errors.length} error${errors.length !== 1 ? 's' : ''})` : ''}`;
     console.log(`[LawsuitTracker] ${summary}`);
+
+    finishScan(summary);
 
     if (newCases > 0) {
       await notify('info', 'AI Lawsuit Tracker Updated', `${newCases} new AI lawsuit${newCases > 1 ? 's' : ''} found. ${updatedCases} existing cases updated.`, '/lawsuits');
@@ -1006,6 +1034,7 @@ export async function runLawsuitTracker() {
     return { result: summary, itemsProcessed: newCases + updatedCases };
   } catch (err) {
     console.error('[LawsuitTracker] Fatal error:', err);
+    finishScan(null, err.message);
     return { result: `Lawsuit tracker failed: ${err.message}`, itemsProcessed: 0 };
   }
 }
