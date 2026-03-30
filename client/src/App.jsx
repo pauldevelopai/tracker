@@ -1,9 +1,17 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { SectorProvider } from './context/SectorContext.jsx';
 import { AiAssistantProvider } from './context/AiAssistantContext.jsx';
+import { useAuth } from './context/AuthContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Layout from './components/Layout.jsx';
+
+// Redirects non-admin users to /lawsuits for all admin-only routes
+function AdminRoute() {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') return <Navigate to="/lawsuits" replace />;
+  return <Outlet />;
+}
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import ContactsList from './pages/contacts/ContactsList.jsx';
@@ -61,51 +69,57 @@ export default function App() {
           <Route path="/portal" element={<ParticipantPortal />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/contacts" element={<ContactsList />} />
-              <Route path="/contacts/:id" element={<ContactDetail />} />
-              <Route path="/organisations" element={<OrganisationsList />} />
-              <Route path="/organisations/:id" element={<OrganisationDetail />} />
-              <Route path="/map" element={<OrganisationMap />} />
-              <Route path="/programmes" element={<CohortsList />} />
-              <Route path="/programmes/:id" element={<CohortDetail />} />
-              <Route path="/assessments" element={<AssessmentsList />} />
-              <Route path="/assessments/:id" element={<AssessmentDetail />} />
-              <Route path="/training-materials" element={<TrainingMaterials />} />
-              <Route path="/course-builder" element={<CurriculumBuilderAgent />} />
-              <Route path="/curriculum" element={<CoursesList />} />
-              <Route path="/curriculum/:id" element={<CourseDetail />} />
-              <Route path="/documents" element={<DocumentsList />} />
+
+              {/* ── Available to all authenticated users ── */}
               <Route path="/lawsuits" element={<LawsuitTracker />} />
-              <Route path="/documents/new" element={<DocumentGenerate />} />
-              <Route path="/documents/:id" element={<DocumentDetail />} />
-              <Route path="/mentoring" element={<MentoringPage />} />
-              <Route path="/services" element={<ServicesList />} />
-              <Route path="/services/:id" element={<EngagementDetail />} />
-              <Route path="/marketing/campaigns" element={<CampaignsList />} />
-              <Route path="/marketing/campaigns/:id" element={<CampaignDetail />} />
-              <Route path="/marketing/social" element={<SocialContent />} />
-              <Route path="/leads" element={<LeadsPage />} />
-              <Route path="/fundraising" element={<PipelineView />} />
-              <Route path="/fundraising/funders" element={<FundersList />} />
-              <Route path="/fundraising/funders/:id" element={<FunderDetail />} />
-              <Route path="/fundraising/opportunities/:id" element={<OpportunityDetail />} />
-              <Route path="/settings/sectors" element={<SectorSettings />} />
-              <Route path="/settings/team" element={<TeamSettings />} />
-              {/* Legacy routes redirect to merged pages */}
-              <Route path="/settings/gmail" element={<GmailSettings />} />
-              <Route path="/settings/jobs" element={<BackgroundJobs />} />
-              <Route path="/intelligence" element={<IntelligenceList />} />
-              <Route path="/knowledge" element={<KnowledgeBase />} />
-              <Route path="/newsletter" element={<NewsletterDigest />} />
-              <Route path="/database" element={<DatabaseEditor />} />
-              <Route path="/learning" element={<LearningDashboard />} />
-              <Route path="/learning/:contactId" element={<JourneyDetail />} />
-              <Route path="/agents" element={<BackgroundJobs />} />
-              <Route path="/agents/curriculum" element={<CurriculumBuilderAgent />} />
-              <Route path="/agents/leads" element={<LeadFinderAgent />} />
-              <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
-              <Route path="/feedback" element={<FeedbackList />} />
+
+              {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
+              <Route element={<AdminRoute />}>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/contacts" element={<ContactsList />} />
+                <Route path="/contacts/:id" element={<ContactDetail />} />
+                <Route path="/organisations" element={<OrganisationsList />} />
+                <Route path="/organisations/:id" element={<OrganisationDetail />} />
+                <Route path="/map" element={<OrganisationMap />} />
+                <Route path="/programmes" element={<CohortsList />} />
+                <Route path="/programmes/:id" element={<CohortDetail />} />
+                <Route path="/assessments" element={<AssessmentsList />} />
+                <Route path="/assessments/:id" element={<AssessmentDetail />} />
+                <Route path="/training-materials" element={<TrainingMaterials />} />
+                <Route path="/course-builder" element={<CurriculumBuilderAgent />} />
+                <Route path="/curriculum" element={<CoursesList />} />
+                <Route path="/curriculum/:id" element={<CourseDetail />} />
+                <Route path="/documents" element={<DocumentsList />} />
+                <Route path="/documents/new" element={<DocumentGenerate />} />
+                <Route path="/documents/:id" element={<DocumentDetail />} />
+                <Route path="/mentoring" element={<MentoringPage />} />
+                <Route path="/services" element={<ServicesList />} />
+                <Route path="/services/:id" element={<EngagementDetail />} />
+                <Route path="/marketing/campaigns" element={<CampaignsList />} />
+                <Route path="/marketing/campaigns/:id" element={<CampaignDetail />} />
+                <Route path="/marketing/social" element={<SocialContent />} />
+                <Route path="/leads" element={<LeadsPage />} />
+                <Route path="/fundraising" element={<PipelineView />} />
+                <Route path="/fundraising/funders" element={<FundersList />} />
+                <Route path="/fundraising/funders/:id" element={<FunderDetail />} />
+                <Route path="/fundraising/opportunities/:id" element={<OpportunityDetail />} />
+                <Route path="/settings/sectors" element={<SectorSettings />} />
+                <Route path="/settings/team" element={<TeamSettings />} />
+                <Route path="/settings/gmail" element={<GmailSettings />} />
+                <Route path="/settings/jobs" element={<BackgroundJobs />} />
+                <Route path="/intelligence" element={<IntelligenceList />} />
+                <Route path="/knowledge" element={<KnowledgeBase />} />
+                <Route path="/newsletter" element={<NewsletterDigest />} />
+                <Route path="/database" element={<DatabaseEditor />} />
+                <Route path="/learning" element={<LearningDashboard />} />
+                <Route path="/learning/:contactId" element={<JourneyDetail />} />
+                <Route path="/agents" element={<BackgroundJobs />} />
+                <Route path="/agents/curriculum" element={<CurriculumBuilderAgent />} />
+                <Route path="/agents/leads" element={<LeadFinderAgent />} />
+                <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
+                <Route path="/feedback" element={<FeedbackList />} />
+              </Route>
+
             </Route>
           </Route>
         </Routes>

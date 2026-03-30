@@ -47,44 +47,57 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Routes
+// ── Open / limited-access endpoints ───────────────────────────────────────────
+// Auth: anyone
 app.use('/api/auth', authRoutes);
-app.use('/api/sectors', requireAuth, sectorRoutes);
-app.use('/api/contacts', requireAuth, sectorFilter, contactRoutes);
-app.use('/api/organisations', requireAuth, sectorFilter, organisationRoutes);
-app.use('/api/team-members', requireAuth, requireRole('admin'), teamMemberRoutes);
-app.use('/api/cohorts', requireAuth, sectorFilter, cohortRoutes);
-app.use('/api/needs-assessments', requireAuth, sectorFilter, needsAssessmentRoutes);
-app.use('/api/assessment-questions', requireAuth, assessmentQuestionRoutes);
-app.use('/api/courses', requireAuth, sectorFilter, courseRoutes);
-app.use('/api/document-templates', requireAuth, documentTemplateRoutes);
-app.use('/api/generated-documents', requireAuth, sectorFilter, generatedDocumentRoutes);
-app.use('/api/service-engagements', requireAuth, sectorFilter, serviceEngagementRoutes);
-app.use('/api/outreach-campaigns', requireAuth, sectorFilter, outreachCampaignRoutes);
-app.use('/api/outreach-messages', requireAuth, outreachMessageRoutes);
-app.use('/api/social-posts', requireAuth, sectorFilter, socialPostRoutes);
-app.use('/api/gmail', requireAuth, gmailRoutes);
-app.use('/api/funders', requireAuth, funderRoutes);
-app.use('/api/funding-opportunities', requireAuth, sectorFilter, fundingOpportunityRoutes);
-app.use('/api/dashboard', requireAuth, sectorFilter, dashboardRoutes);
-app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
-app.use('/api/background-jobs', requireAuth, requireRole('admin'), backgroundJobRoutes);
-app.use('/api/notifications', requireAuth, notificationRoutes);
-app.use('/api/knowledge', requireAuth, knowledgeRoutes);
-app.use('/api/uploads', requireAuth, uploadRoutes);
-app.use('/api/intelligence', requireAuth, intelligenceRoutes);
-app.use('/api/newsletter', requireAuth, newsletterRoutes);
+// Participant portal: public, token-authenticated
+app.use('/api/portal', participantPortalRoutes);
+// Lawsuits: all authenticated users (admin + member roles)
 app.use('/api/lawsuits', requireAuth, lawsuitRoutes);
-app.use('/api/learning-outcomes', requireAuth, learningOutcomeRoutes);
-app.use('/api/learning-tasks', requireAuth, learningTaskRoutes);
-app.use('/api/learning-journeys', requireAuth, sectorFilter, learningJourneyRoutes);
-app.use('/api/participant-tokens', requireAuth, requireRole('admin'), participantTokenRoutes);
-app.use('/api/portal', participantPortalRoutes); // Public — token-authenticated
-app.use('/api/agent-conversations', requireAuth, agentConversationRoutes);
-app.use('/api/agent-actions', requireAuth, agentActionRoutes);
-app.use('/api/feedback', requireAuth, feedbackRoutes);
 
-// Error handler
+// ── Admin-only endpoints ───────────────────────────────────────────────────────
+// All routes below this point require role = 'admin'.
+// Non-admin users only have access to /api/lawsuits and /api/auth above.
+const admin = express.Router();
+admin.use(requireAuth);
+admin.use(requireRole('admin'));
+
+admin.use('/sectors',              sectorRoutes);
+admin.use('/contacts',             sectorFilter, contactRoutes);
+admin.use('/organisations',        sectorFilter, organisationRoutes);
+admin.use('/team-members',         teamMemberRoutes);
+admin.use('/cohorts',              sectorFilter, cohortRoutes);
+admin.use('/needs-assessments',    sectorFilter, needsAssessmentRoutes);
+admin.use('/assessment-questions', assessmentQuestionRoutes);
+admin.use('/courses',              sectorFilter, courseRoutes);
+admin.use('/document-templates',   documentTemplateRoutes);
+admin.use('/generated-documents',  sectorFilter, generatedDocumentRoutes);
+admin.use('/service-engagements',  sectorFilter, serviceEngagementRoutes);
+admin.use('/outreach-campaigns',   sectorFilter, outreachCampaignRoutes);
+admin.use('/outreach-messages',    outreachMessageRoutes);
+admin.use('/social-posts',         sectorFilter, socialPostRoutes);
+admin.use('/gmail',                gmailRoutes);
+admin.use('/funders',              funderRoutes);
+admin.use('/funding-opportunities', sectorFilter, fundingOpportunityRoutes);
+admin.use('/dashboard',            sectorFilter, dashboardRoutes);
+admin.use('/ai-assistant',         aiAssistantRoutes);
+admin.use('/background-jobs',      backgroundJobRoutes);
+admin.use('/notifications',        notificationRoutes);
+admin.use('/knowledge',            knowledgeRoutes);
+admin.use('/uploads',              uploadRoutes);
+admin.use('/intelligence',         intelligenceRoutes);
+admin.use('/newsletter',           newsletterRoutes);
+admin.use('/learning-outcomes',    learningOutcomeRoutes);
+admin.use('/learning-tasks',       learningTaskRoutes);
+admin.use('/learning-journeys',    sectorFilter, learningJourneyRoutes);
+admin.use('/participant-tokens',   participantTokenRoutes);
+admin.use('/agent-conversations',  agentConversationRoutes);
+admin.use('/agent-actions',        agentActionRoutes);
+admin.use('/feedback',             feedbackRoutes);
+
+app.use('/api', admin);
+
+// ── Error handler ──────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ message: 'Internal server error' });
