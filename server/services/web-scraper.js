@@ -650,12 +650,63 @@ export async function scrapeCourtListener(keywords = ['artificial intelligence',
   return results.filter(r => r.url && !seen.has(r.url) && seen.add(r.url));
 }
 
-// Scrape AI lawsuit news from legal sources
+// RSS feeds — much more reliable than HTML scraping
+const RSS_LAWSUIT_SOURCES = [
+  { url: 'https://news.google.com/rss/search?q=AI+lawsuit+copyright&hl=en-US&gl=US&ceid=US:en', name: 'Google News: AI lawsuit' },
+  { url: 'https://news.google.com/rss/search?q=OpenAI+lawsuit+copyright+court&hl=en-US&gl=US&ceid=US:en', name: 'Google News: OpenAI court' },
+  { url: 'https://news.google.com/rss/search?q=generative+AI+copyright+litigation&hl=en-US&gl=US&ceid=US:en', name: 'Google News: GenAI litigation' },
+  { url: 'https://news.google.com/rss/search?q=artificial+intelligence+lawsuit+settlement&hl=en-US&gl=US&ceid=US:en', name: 'Google News: AI settlement' },
+  { url: 'https://www.eff.org/rss/updates.xml', name: 'EFF Updates' },
+  { url: 'https://feeds.arstechnica.com/arstechnica/technology-lab', name: 'Ars Technica Tech' },
+  { url: 'https://www.techdirt.com/feed/', name: 'Techdirt Feed' },
+  { url: 'https://feeds.feedburner.com/TorrentFreak', name: 'TorrentFreak Feed' },
+];
+
+// Parse RSS/Atom feed and return articles matching AI+legal keywords
+async function scrapeRSSFeed(feedUrl, sourceName) {
+  const KEYWORDS = ['lawsuit', 'sued', 'copyright', 'litigation', 'court', 'legal', 'infringement', 'settlement', 'ruling', 'verdict', 'filed', 'plaintiff', 'defendant', 'damages'];
+  try {
+    const { data } = await axios.get(feedUrl, {
+      timeout: 12000,
+      headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/rss+xml, application/xml, text/xml' },
+      maxRedirects: 3,
+    });
+    const $ = cheerio.load(data, { xmlMode: true });
+    const items = [];
+    $('item, entry').each((_, el) => {
+      const title = $(el).find('title').first().text().trim();
+      const link = $(el).find('link').first().text().trim() || $(el).find('link').first().attr('href') || '';
+      const description = $(el).find('description, summary, content').first().text().replace(/<[^>]+>/g, '').trim().slice(0, 300);
+      const pubDate = $(el).find('pubDate, published, updated').first().text().trim();
+      if (!title || !link) return;
+      const lower = (title + ' ' + description).toLowerCase();
+      const hasAI = lower.includes('ai') || lower.includes('artificial intelligence') || lower.includes('openai') || lower.includes('anthropic') || lower.includes('generative') || lower.includes('claude') || lower.includes('chatgpt') || lower.includes('grok') || lower.includes('midjourney') || lower.includes('stability ai') || lower.includes('meta llama') || lower.includes('google gemini');
+      const hasLegal = KEYWORDS.some(k => lower.includes(k));
+      if (hasAI && hasLegal) {
+        items.push({ url: link, title, description, source: sourceName, publishDate: pubDate });
+      }
+    });
+    return items.slice(0, 6);
+  } catch (e) {
+    console.log(`[LawsuitRSS] Failed ${sourceName}: ${e.message}`);
+    return [];
+  }
+}
+
+// Scrape AI lawsuit news from legal sources (HTML + RSS)
 export async function scrapeLawsuitNews() {
   const sources = SECTOR_SOURCES.ai_lawsuits || [];
   const allArticles = [];
-  const KEYWORDS = ['lawsuit', 'sued', 'copyright', 'litigation', 'court', 'legal', 'infringement', 'settlement'];
+  const KEYWORDS = ['lawsuit', 'sued', 'copyright', 'litigation', 'court', 'legal', 'infringement', 'settlement', 'ruling', 'verdict', 'damages'];
 
+  // Phase 1: RSS feeds (reliable, structured)
+  for (const feed of RSS_LAWSUIT_SOURCES) {
+    const items = await scrapeRSSFeed(feed.url, feed.name);
+    allArticles.push(...items);
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Phase 2: HTML scraping of curated sites
   for (const source of sources) {
     try {
       const { data } = await axios.get(source.url, {
@@ -670,9 +721,8 @@ export async function scrapeLawsuitNews() {
         const text = $(el).text().trim();
         if (href && text.length > 10) {
           const fullUrl = href.startsWith('http') ? href : new URL(href, source.url).href;
-          // Only include if headline mentions AI + legal terms
           const lower = text.toLowerCase();
-          const hasAI = lower.includes('ai') || lower.includes('artificial intelligence') || lower.includes('openai') || lower.includes('anthropic') || lower.includes('generative');
+          const hasAI = lower.includes('ai') || lower.includes('artificial intelligence') || lower.includes('openai') || lower.includes('anthropic') || lower.includes('generative') || lower.includes('midjourney') || lower.includes('stability') || lower.includes('chatgpt');
           const hasLegal = KEYWORDS.some(k => lower.includes(k));
           if (hasAI && hasLegal) {
             links.push({ url: fullUrl, title: text, source: source.name });
@@ -680,13 +730,13 @@ export async function scrapeLawsuitNews() {
         }
       });
       allArticles.push(...links.slice(0, 4));
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
     } catch (e) {
       console.log(`[LawsuitScraper] Failed ${source.name}: ${e.message}`);
     }
   }
 
-  // Deduplicate
+  // Deduplicate by URL
   const seen = new Set();
   return allArticles.filter(a => a.url && !seen.has(a.url) && seen.add(a.url));
 }

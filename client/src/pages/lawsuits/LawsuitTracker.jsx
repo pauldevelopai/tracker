@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../hooks/useApi.js';
 import PageHeader from '../../components/PageHeader.jsx';
 import AiBadge from '../../components/AiBadge.jsx';
@@ -20,7 +20,17 @@ const TYPE_COLORS = {
   other:      '#94A3B8',
 };
 
-const MAJOR_DEFENDANTS = ['OpenAI', 'Microsoft', 'Meta', 'Google', 'Stability AI', 'Anthropic', 'Midjourney', 'Perplexity'];
+const EVENT_TYPE_STYLES = {
+  filing:     { color: '#6366F1', icon: '⚖' },
+  hearing:    { color: '#F59E0B', icon: '🗓' },
+  ruling:     { color: '#EF4444', icon: '📋' },
+  settlement: { color: '#10B981', icon: '🤝' },
+  dismissal:  { color: '#6B7280', icon: '✕' },
+  decision:   { color: '#92400E', icon: '⚖' },
+  appeal:     { color: '#6D28D9', icon: '↑' },
+  amendment:  { color: '#0891B2', icon: '✎' },
+  update:     { color: '#64748B', icon: '•' },
+};
 
 function StatusBadge({ status }) {
   const s = STATUS_COLORS[status] || STATUS_COLORS.active;
@@ -47,8 +57,7 @@ function formatDate(d) {
 
 function daysUntil(d) {
   if (!d) return null;
-  const diff = Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
-  return diff;
+  return Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
 }
 
 export default function LawsuitTracker() {
@@ -57,12 +66,16 @@ export default function LawsuitTracker() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [events, setEvents] = useState({});   // { caseId: [...events] }
+  const [refreshMsg, setRefreshMsg] = useState(null);
 
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterDefendant, setFilterDefendant] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [search, setSearch] = useState('');
-  const [refreshMsg, setRefreshMsg] = useState(null);
+
+  // Refs so deadline chips can scroll to the right card
+  const cardRefs = useRef({});
 
   function loadAll() {
     const params = new URLSearchParams();
@@ -82,6 +95,22 @@ export default function LawsuitTracker() {
 
   useEffect(() => { loadAll(); }, [filterStatus, filterDefendant, filterType, search]);
 
+  // Lazy-load events when a case is expanded
+  useEffect(() => {
+    if (!selected || events[selected]) return;
+    apiFetch(`/lawsuits/${selected}/events`)
+      .then(e => setEvents(prev => ({ ...prev, [selected]: e })))
+      .catch(() => setEvents(prev => ({ ...prev, [selected]: [] })));
+  }, [selected]);
+
+  function selectAndScroll(id) {
+    setSelected(prev => prev === id ? null : id);
+    // Small delay to let React render the expanded card before scrolling
+    setTimeout(() => {
+      cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+  }
+
   async function refresh() {
     setRefreshing(true);
     setRefreshMsg(null);
@@ -96,8 +125,6 @@ export default function LawsuitTracker() {
       setTimeout(() => setRefreshMsg(null), 12000);
     }
   }
-
-  const activeCases = cases.filter(c => c.status === 'active' || c.status === 'appealing');
 
   return (
     <div>
@@ -140,7 +167,7 @@ export default function LawsuitTracker() {
         </div>
       )}
 
-      {/* Upcoming deadlines */}
+      {/* Upcoming deadlines — clicking expands + scrolls to the case */}
       {stats?.deadlines?.length > 0 && (
         <div className="card" style={{ marginBottom: 16, padding: '12px 16px', borderLeft: '3px solid #EF4444' }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#EF4444', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>⏱ Upcoming Deadlines</div>
@@ -148,13 +175,24 @@ export default function LawsuitTracker() {
             {stats.deadlines.map(d => {
               const days = daysUntil(d.next_deadline);
               const urgent = days !== null && days <= 30;
+              const isOpen = selected === d.id;
               return (
-                <div key={d.id} onClick={() => setSelected(d.id)} style={{ cursor: 'pointer', fontSize: 12, padding: '5px 10px', borderRadius: 6, border: `1px solid ${urgent ? '#FECACA' : 'var(--border-color)'}`, background: urgent ? '#FEF2F2' : 'var(--card-bg)' }}>
+                <div
+                  key={d.id}
+                  onClick={() => selectAndScroll(d.id)}
+                  style={{
+                    cursor: 'pointer', fontSize: 12, padding: '6px 12px', borderRadius: 6,
+                    border: `1.5px solid ${isOpen ? '#6366F1' : urgent ? '#FECACA' : 'var(--border-color)'}`,
+                    background: isOpen ? '#EEF2FF' : urgent ? '#FEF2F2' : 'var(--card-bg)',
+                    transition: 'all 0.15s',
+                  }}
+                >
                   <span style={{ fontWeight: 600 }}>{d.case_name.length > 35 ? d.case_name.slice(0, 35) + '…' : d.case_name}</span>
                   <span style={{ color: urgent ? '#EF4444' : 'var(--text-secondary)', marginLeft: 6 }}>
                     {formatDate(d.next_deadline)}{days !== null && ` (${days}d)`}
                   </span>
                   {d.next_deadline_notes && <div style={{ color: 'var(--text-secondary)', fontSize: 11, marginTop: 2 }}>{d.next_deadline_notes}</div>}
+                  <div style={{ fontSize: 10, color: '#6366F1', marginTop: 2 }}>↓ click to expand</div>
                 </div>
               );
             })}
@@ -218,22 +256,34 @@ export default function LawsuitTracker() {
 
       {/* Case list */}
       {!loading && cases.map(c => (
-        <CaseCard key={c.id} case_={c} selected={selected === c.id} onSelect={() => setSelected(selected === c.id ? null : c.id)} />
+        <CaseCard
+          key={c.id}
+          case_={c}
+          selected={selected === c.id}
+          events={events[c.id]}
+          onSelect={() => selectAndScroll(c.id)}
+          cardRef={el => { if (el) cardRefs.current[c.id] = el; }}
+        />
       ))}
     </div>
   );
 }
 
-function CaseCard({ case_: c, selected, onSelect }) {
+function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
   const deadline = c.next_deadline ? daysUntil(c.next_deadline) : null;
   const deadlineUrgent = deadline !== null && deadline <= 30 && (c.status === 'active' || c.status === 'appealing');
 
   return (
-    <div className="card" style={{
-      marginBottom: 6, padding: 0, overflow: 'hidden',
-      borderLeft: `3px solid ${TYPE_COLORS[c.case_type] || '#94A3B8'}`,
-      cursor: 'pointer',
-    }} onClick={onSelect}>
+    <div
+      ref={cardRef}
+      className="card"
+      style={{
+        marginBottom: 6, padding: 0, overflow: 'hidden',
+        borderLeft: `3px solid ${TYPE_COLORS[c.case_type] || '#94A3B8'}`,
+        cursor: 'pointer',
+      }}
+      onClick={onSelect}
+    >
       {/* Header row */}
       <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1 }}>
@@ -262,7 +312,6 @@ function CaseCard({ case_: c, selected, onSelect }) {
             </div>
           )}
 
-          {/* Key issues chips */}
           {selected && c.key_issues?.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
               {c.key_issues.map(issue => (
@@ -276,17 +325,18 @@ function CaseCard({ case_: c, selected, onSelect }) {
           {c.filing_date && <div>Filed {formatDate(c.filing_date)}</div>}
           {c.judge && <div style={{ marginTop: 2 }}>Judge {c.judge}</div>}
           {c.settlement_amount && <div style={{ marginTop: 2, color: '#065F46', fontWeight: 600 }}>{c.settlement_amount}</div>}
+          <div style={{ marginTop: 4, fontSize: 10, color: '#6366F1' }}>{selected ? '▲ collapse' : '▼ expand'}</div>
         </div>
       </div>
 
       {/* Expanded detail */}
       {selected && (
-        <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 14px', background: '#FAFBFC' }}>
+        <div style={{ borderTop: '1px solid var(--border-color)', padding: '14px 14px', background: '#FAFBFC' }} onClick={e => e.stopPropagation()}>
           {c.summary && (
-            <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 10, color: 'var(--text-primary)' }}>{c.summary}</p>
+            <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12, color: 'var(--text-primary)' }}>{c.summary}</p>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
             {c.court && <DetailField label="Court" value={c.court} />}
             {c.district && <DetailField label="District/Circuit" value={`${c.district}${c.circuit ? ` · ${c.circuit}` : ''}`} />}
             {c.last_update && <DetailField label="Last Update" value={formatDate(c.last_update)} />}
@@ -294,7 +344,7 @@ function CaseCard({ case_: c, selected, onSelect }) {
           </div>
 
           {c.next_deadline && (
-            <div style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 6, background: deadlineUrgent ? '#FEF2F2' : '#EFF6FF', border: `1px solid ${deadlineUrgent ? '#FECACA' : '#BFDBFE'}` }}>
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, background: deadlineUrgent ? '#FEF2F2' : '#EFF6FF', border: `1px solid ${deadlineUrgent ? '#FECACA' : '#BFDBFE'}` }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: deadlineUrgent ? '#EF4444' : '#1D4ED8' }}>
                 Next: {c.next_deadline_notes || 'Deadline'} — {formatDate(c.next_deadline)}
                 {deadline !== null && ` (${deadline > 0 ? `in ${deadline} days` : 'past'})`}
@@ -303,25 +353,105 @@ function CaseCard({ case_: c, selected, onSelect }) {
           )}
 
           {c.curriculum_relevance && (
-            <div style={{ fontSize: 12, padding: '8px 10px', background: '#EEF2FF', borderRadius: 6, color: 'var(--accent)', marginBottom: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, padding: '8px 10px', background: '#EEF2FF', borderRadius: 6, color: 'var(--accent)', marginBottom: 12, lineHeight: 1.5 }}>
               <strong>Curriculum relevance:</strong> {c.curriculum_relevance}
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
             {c.case_url && (
-              <a href={c.case_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }}>
+              <a href={c.case_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
                 Court Documents →
               </a>
             )}
             {c.source_url && c.source_url !== c.case_url && (
-              <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }}>
+              <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
                 Source Article →
               </a>
             )}
           </div>
+
+          {/* Event Timeline */}
+          <EventTimeline events={events} caseId={c.id} />
         </div>
       )}
+    </div>
+  );
+}
+
+function EventTimeline({ events, caseId }) {
+  if (!events) {
+    return (
+      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Case History</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Loading history…</div>
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Case History</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>No events recorded yet. Refresh to scan for updates.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12 }}>
+        Case History ({events.length} event{events.length !== 1 ? 's' : ''})
+      </div>
+      <div style={{ position: 'relative', paddingLeft: 20 }}>
+        {/* vertical line */}
+        <div style={{ position: 'absolute', left: 6, top: 6, bottom: 6, width: 2, background: 'var(--border-color)', borderRadius: 2 }} />
+
+        {events.map((ev, i) => {
+          const style = EVENT_TYPE_STYLES[ev.event_type] || EVENT_TYPE_STYLES.update;
+          return (
+            <div key={ev.id} style={{ position: 'relative', marginBottom: i < events.length - 1 ? 16 : 0 }}>
+              {/* dot */}
+              <div style={{
+                position: 'absolute', left: -20, top: 2,
+                width: 14, height: 14, borderRadius: '50%',
+                background: style.color, color: 'white',
+                fontSize: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 700, zIndex: 1,
+              }}>
+                {style.icon}
+              </div>
+
+              <div style={{ paddingLeft: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: style.color }}>
+                    {ev.title || ev.event_type}
+                  </span>
+                  {ev.event_date && (
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                      {formatDate(ev.event_date)}
+                    </span>
+                  )}
+                </div>
+                {ev.description && (
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 2 }}>
+                    {ev.description}
+                  </div>
+                )}
+                {ev.source_url && (
+                  <a
+                    href={ev.source_url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none', marginTop: 2, display: 'inline-block' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    Source →
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -83,6 +83,20 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get events for a case (must be before /:id)
+router.get('/:id/events', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM ai_lawsuit_events WHERE lawsuit_id = $1 ORDER BY event_date ASC NULLS LAST, created_at ASC`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 // Get single case
 router.get('/:id', async (req, res) => {
   try {
@@ -156,6 +170,23 @@ router.put('/:id', async (req, res) => {
     );
     if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
     res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Add an event to a case
+router.post('/:id/events', async (req, res) => {
+  try {
+    const { event_date, event_type, title, description, source_url } = req.body;
+    if (!title && !description) return res.status(400).json({ message: 'title or description required' });
+    const { rows } = await pool.query(
+      `INSERT INTO ai_lawsuit_events (lawsuit_id, event_date, event_type, title, description, source_url)
+       VALUES ($1, $2::date, $3, $4, $5, $6) RETURNING *`,
+      [req.params.id, event_date || null, event_type || 'update', title || null, description || null, source_url || null]
+    );
+    res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });

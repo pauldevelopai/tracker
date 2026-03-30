@@ -882,6 +882,10 @@ export async function runLawsuitTracker() {
           );
 
           if (existing.length > 0) {
+            // Fetch current state to detect changes
+            const { rows: current } = await pool.query('SELECT status, outcome, next_deadline FROM ai_lawsuits WHERE id = $1', [existing[0].id]);
+            const prev = current[0];
+
             // Update existing case status/deadline
             await pool.query(
               `UPDATE ai_lawsuits SET
@@ -902,6 +906,38 @@ export async function runLawsuitTracker() {
                 existing[0].id,
               ]
             );
+
+            // Write a history event if something meaningful changed
+            const statusChanged = lawsuit.status && lawsuit.status !== prev.status;
+            const outcomeAdded = lawsuit.outcome && !prev.outcome;
+            const deadlineAdded = lawsuit.next_deadline && !prev.next_deadline;
+
+            if (statusChanged || outcomeAdded || deadlineAdded) {
+              let eventType = 'update';
+              let eventTitle = 'Case update';
+              if (statusChanged) {
+                eventType = lawsuit.status === 'settled' ? 'settlement' : lawsuit.status === 'dismissed' ? 'dismissal' : lawsuit.status === 'decided' ? 'decision' : lawsuit.status === 'appealing' ? 'appeal' : 'update';
+                eventTitle = statusChanged ? `Status changed to ${lawsuit.status}` : 'Case update';
+              } else if (outcomeAdded) {
+                eventType = 'ruling';
+                eventTitle = 'Outcome recorded';
+              } else if (deadlineAdded) {
+                eventType = 'hearing';
+                eventTitle = 'Upcoming deadline set';
+              }
+              await pool.query(
+                `INSERT INTO ai_lawsuit_events (lawsuit_id, event_date, event_type, title, description, source_url)
+                 VALUES ($1, $2::date, $3, $4, $5, $6)`,
+                [
+                  existing[0].id,
+                  lawsuit.last_update || new Date().toISOString().split('T')[0],
+                  eventType,
+                  eventTitle,
+                  outcomeAdded ? lawsuit.outcome : (deadlineAdded ? `Next deadline: ${lawsuit.next_deadline_notes || lawsuit.next_deadline}` : `Status: ${lawsuit.status}`),
+                  article.url || null,
+                ]
+              );
+            }
             updatedCases++;
           } else {
             // Insert new case
@@ -937,6 +973,21 @@ export async function runLawsuitTracker() {
                 lawsuit.curriculum_relevance || null,
               ]
             );
+
+            // Seed a filing event for the new case
+            const { rows: newRow } = await pool.query('SELECT id FROM ai_lawsuits WHERE case_name = $1', [lawsuit.case_name]);
+            if (newRow.length > 0) {
+              await pool.query(
+                `INSERT INTO ai_lawsuit_events (lawsuit_id, event_date, event_type, title, description, source_url)
+                 VALUES ($1, $2::date, 'filing', 'Case discovered', $3, $4)`,
+                [
+                  newRow[0].id,
+                  lawsuit.filing_date || lawsuit.last_update || new Date().toISOString().split('T')[0],
+                  `Identified via automated scan. ${lawsuit.summary ? lawsuit.summary.slice(0, 200) : ''}`.trim(),
+                  article.url || null,
+                ]
+              );
+            }
             newCases++;
           }
         }
