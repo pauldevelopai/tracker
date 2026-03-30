@@ -110,18 +110,21 @@ const SECTOR_SOURCES = {
   ],
   // AI lawsuit & legal news sources — used by runLawsuitTracker
   ai_lawsuits: [
-    { url: 'https://chatgptiseatingtheworld.com/', name: 'ChatGPT Is Eating The World', selector: 'article a, h2 a, .entry-title a' },
-    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI', selector: 'article a, h2 a' },
-    { url: 'https://techcrunch.com/category/artificial-intelligence/', name: 'TechCrunch AI', selector: 'article a, h3 a' },
-    { url: 'https://arstechnica.com/tech-policy/', name: 'Ars Technica Policy', selector: 'article a, h2 a' },
-    { url: 'https://torrentfreak.com/tag/artificial-intelligence/', name: 'TorrentFreak AI', selector: 'article a, h2 a, .post-title a' },
-    { url: 'https://ipwatchdog.com/category/artificial-intelligence/', name: 'IP Watchdog AI', selector: 'article a, .entry-title a, h2 a' },
-    { url: 'https://www.techdirt.com/tag/copyright/', name: 'Techdirt Copyright', selector: 'article a, h3 a, .story-title a' },
-    { url: 'https://www.techdirt.com/tag/artificial-intelligence/', name: 'Techdirt AI', selector: 'article a, h3 a, .story-title a' },
-    { url: 'https://news.bloomberglaw.com/ip-law', name: 'Bloomberg IP Law', selector: 'article a, h3 a, .story-title a' },
-    { url: 'https://www.jdsupra.com/topics/artificial-intelligence/', name: 'JD Supra AI', selector: 'article a, h3 a, .jds-item__title a' },
-    { url: 'https://www.wired.com/tag/artificial-intelligence/', name: 'WIRED AI', selector: 'article a, h3 a' },
-    { url: 'https://futurism.com/the-byte', name: 'Futurism AI', selector: 'article a, h2 a, .headline a' },
+    { url: 'https://chatgptiseatingtheworld.com/', name: 'ChatGPT Is Eating The World', selector: 'article a, h2 a, .entry-title a', description: 'Tracks AI copyright and IP developments' },
+    { url: 'https://www.eff.org/deeplinks', name: 'EFF Deeplinks', selector: 'article a, h3 a, .views-field-title a', description: 'Electronic Frontier Foundation — digital rights and copyright litigation' },
+    { url: 'https://www.theverge.com/ai-artificial-intelligence', name: 'The Verge AI', selector: 'article a, h2 a', description: 'Tech and AI industry news including legal coverage' },
+    { url: 'https://techcrunch.com/category/artificial-intelligence/', name: 'TechCrunch AI', selector: 'article a, h3 a', description: 'AI startup and industry news' },
+    { url: 'https://arstechnica.com/tech-policy/', name: 'Ars Technica Policy', selector: 'article a, h2 a', description: 'In-depth tech policy and court coverage' },
+    { url: 'https://torrentfreak.com/tag/artificial-intelligence/', name: 'TorrentFreak AI', selector: 'article a, h2 a, .post-title a', description: 'Copyright and piracy law, AI training data cases' },
+    { url: 'https://ipwatchdog.com/category/artificial-intelligence/', name: 'IP Watchdog', selector: 'article a, .entry-title a, h2 a', description: 'Specialist IP law and patent news' },
+    { url: 'https://www.techdirt.com/tag/copyright/', name: 'Techdirt Copyright', selector: 'article a, h3 a, .story-title a', description: 'Copyright law analysis and criticism' },
+    { url: 'https://www.techdirt.com/tag/artificial-intelligence/', name: 'Techdirt AI', selector: 'article a, h3 a, .story-title a', description: 'AI policy and legal commentary' },
+    { url: 'https://news.bloomberglaw.com/ip-law', name: 'Bloomberg Law IP', selector: 'article a, h3 a, .story-title a', description: 'Bloomberg Law IP coverage' },
+    { url: 'https://www.jdsupra.com/topics/artificial-intelligence/', name: 'JD Supra AI', selector: 'article a, h3 a, .jds-item__title a', description: 'Legal professionals publishing AI law analysis' },
+    { url: 'https://www.wired.com/tag/artificial-intelligence/', name: 'WIRED AI', selector: 'article a, h3 a', description: 'Long-form AI journalism including legal issues' },
+    { url: 'https://futurism.com/the-byte', name: 'Futurism / The Byte', selector: 'article a, h2 a, .headline a', description: 'AI news including ethics and legal stories' },
+    { url: 'https://www.hollywoodreporter.com/t/artificial-intelligence/', name: 'Hollywood Reporter AI', selector: 'article a, h3 a', description: 'Entertainment industry AI lawsuits (SAG, writers)' },
+    { url: 'https://variety.com/t/artificial-intelligence/', name: 'Variety AI', selector: 'article a, h3 a', description: 'Film/TV industry AI rights and labour cases' },
   ],
   general_ai: [
     // Major AI news
@@ -149,6 +152,22 @@ const SECTOR_SOURCES = {
     { url: 'https://www.accessnow.org/news/', name: 'Access Now', selector: 'article a, h3 a' },
   ],
 };
+
+// Exported source registry for the lawsuit tracker sources panel
+export const LAWSUIT_SOURCES_META = [
+  {
+    name: 'CourtListener (PACER)',
+    url: 'https://www.courtlistener.com/',
+    type: 'api',
+    description: 'Free federal court docket API — searches PACER for AI copyright filings within last 90 days',
+  },
+  ...SECTOR_SOURCES.ai_lawsuits.map(s => ({
+    name: s.name,
+    url: s.url,
+    type: 'web',
+    description: s.description || null,
+  })),
+];
 
 // Scrape latest headlines from sector news sources
 // Phase 1: Quick headline scan across all sources (fast)

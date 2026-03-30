@@ -181,6 +181,8 @@ export default function LawsuitTracker() {
   const [filterDefendant, setFilterDefendant] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [search, setSearch] = useState('');
+  const [sources, setSources] = useState(null);
+  const [showSources, setShowSources] = useState(false);
 
   // Live scan state
   const [scanStatus, setScanStatus] = useState(null);
@@ -209,6 +211,10 @@ export default function LawsuitTracker() {
   }, [filterStatus, filterDefendant, filterType, search]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  useEffect(() => {
+    apiFetch('/lawsuits/sources').then(setSources).catch(() => {});
+  }, []);
 
   // Lazy-load events when a case is expanded
   useEffect(() => {
@@ -301,13 +307,25 @@ export default function LawsuitTracker() {
         <AiBadge />
         <button
           className="btn btn-secondary btn-small"
+          onClick={() => setShowSources(s => !s)}
+          style={{ fontSize: 11 }}
+        >
+          {showSources ? '▲ Hide Sources' : `◎ ${sources?.totalSources || '…'} Sources`}
+        </button>
+        <button
+          className="btn btn-secondary btn-small"
           onClick={isScanning ? undefined : refresh}
           disabled={isScanning}
           style={{ fontSize: 11, opacity: isScanning ? 0.6 : 1 }}
         >
-          {isScanning ? '● Scanning…' : '↻ Scan Sources'}
+          {isScanning ? '● Scanning…' : '↻ Scan Now'}
         </button>
       </PageHeader>
+
+      {/* Sources panel */}
+      {showSources && sources && (
+        <SourcesPanel sources={sources} />
+      )}
 
       {/* Live scan progress banner */}
       <ScanBanner
@@ -432,6 +450,7 @@ export default function LawsuitTracker() {
           events={events[c.id]}
           onSelect={() => selectAndScroll(c.id)}
           cardRef={el => { if (el) cardRefs.current[c.id] = el; }}
+          onCaseUpdate={updated => setCases(prev => prev.map(x => x.id === updated.id ? { ...x, ...updated } : x))}
         />
       ))}
     </div>
@@ -439,7 +458,43 @@ export default function LawsuitTracker() {
 }
 
 // ─── Case card ─────────────────────────────────────────────────────────────────
-function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
+function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate }) {
+  const [analysing, setAnalysing] = useState(false);
+  const [addingKnowledge, setAddingKnowledge] = useState(false);
+  const [actionMsg, setActionMsg] = useState(null);
+
+  async function generateAnalysis(e) {
+    e.stopPropagation();
+    setAnalysing(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/lawsuits/${c.id}/analyse`, { method: 'POST' });
+      onCaseUpdate?.({ id: c.id, detailed_analysis: r.detailed_analysis, analysis_generated_at: new Date().toISOString() });
+      setActionMsg({ type: 'success', text: 'Analysis generated' });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'Analysis failed: ' + err.message });
+    } finally {
+      setAnalysing(false);
+      setTimeout(() => setActionMsg(null), 6000);
+    }
+  }
+
+  async function addToKnowledge(e) {
+    e.stopPropagation();
+    setAddingKnowledge(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/lawsuits/${c.id}/add-to-knowledge`, { method: 'POST' });
+      onCaseUpdate?.({ id: c.id, knowledge_entry_id: r.knowledge_entry_id });
+      setActionMsg({ type: 'success', text: r.created ? 'Added to Holly\'s knowledge base' : 'Knowledge entry updated' });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'Failed: ' + err.message });
+    } finally {
+      setAddingKnowledge(false);
+      setTimeout(() => setActionMsg(null), 6000);
+    }
+  }
+
   return (
     <div
       ref={cardRef}
@@ -500,9 +555,33 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
       {/* Expanded detail */}
       {selected && (
         <div style={{ borderTop: '1px solid var(--border-color)', padding: '14px 14px', background: '#FAFBFC' }} onClick={e => e.stopPropagation()}>
-          {c.summary && (
-            <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12, color: 'var(--text-primary)' }}>{c.summary}</p>
+
+          {/* Action feedback */}
+          {actionMsg && (
+            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+              background: actionMsg.type === 'success' ? '#D1FAE5' : '#FEE2E2',
+              color: actionMsg.type === 'success' ? '#065F46' : '#991B1B' }}>
+              {actionMsg.type === 'success' ? '✓ ' : '⚠ '}{actionMsg.text}
+            </div>
           )}
+
+          {/* Deep analysis — primary content block */}
+          {c.detailed_analysis ? (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                AI Legal Analysis {c.analysis_generated_at && <span style={{ fontWeight: 400 }}>· generated {timeAgo(c.analysis_generated_at)}</span>}
+              </div>
+              {c.detailed_analysis.split('\n\n').map((para, i) => (
+                para.trim() ? (
+                  <p key={i} style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 10, color: 'var(--text-primary)' }}>
+                    {para.trim()}
+                  </p>
+                ) : null
+              ))}
+            </div>
+          ) : c.summary ? (
+            <p style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12, color: 'var(--text-primary)' }}>{c.summary}</p>
+          ) : null}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
             {c.court && <DetailField label="Court" value={c.court} />}
@@ -521,19 +600,41 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
 
           {c.curriculum_relevance && (
             <div style={{ fontSize: 12, padding: '8px 10px', background: '#EEF2FF', borderRadius: 6, color: 'var(--accent)', marginBottom: 12, lineHeight: 1.5 }}>
-              <strong>Curriculum relevance:</strong> {c.curriculum_relevance}
+              <strong>Why this matters for AI training:</strong> {c.curriculum_relevance}
             </div>
           )}
 
+          {/* Action buttons */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+            <button
+              onClick={generateAnalysis}
+              disabled={analysing}
+              className="btn btn-secondary btn-small"
+              style={{ fontSize: 11, opacity: analysing ? 0.6 : 1 }}
+            >
+              {analysing ? '⏳ Generating…' : c.detailed_analysis ? '↻ Regenerate Analysis' : '✦ Generate Analysis'}
+            </button>
+            <button
+              onClick={addToKnowledge}
+              disabled={addingKnowledge}
+              className="btn btn-small"
+              style={{
+                fontSize: 11, opacity: addingKnowledge ? 0.6 : 1,
+                background: c.knowledge_entry_id ? '#D1FAE5' : 'var(--accent)',
+                color: c.knowledge_entry_id ? '#065F46' : 'white',
+                border: c.knowledge_entry_id ? '1px solid #6EE7B7' : 'none',
+              }}
+            >
+              {addingKnowledge ? '⏳ Saving…' : c.knowledge_entry_id ? '✓ In Knowledge Base' : '+ Add to Knowledge'}
+            </button>
             {c.case_url && (
               <a href={c.case_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
-                Court Documents →
+                Court Docs →
               </a>
             )}
             {c.source_url && c.source_url !== c.case_url && (
               <a href={c.source_url} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-small" style={{ fontSize: 11 }} onClick={e => e.stopPropagation()}>
-                Source Article →
+                Source →
               </a>
             )}
           </div>
@@ -542,6 +643,47 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef }) {
           <EventTimeline events={events} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Sources panel ────────────────────────────────────────────────────────────
+function SourcesPanel({ sources }) {
+  const typeColors = { api: '#6366F1', web: '#0891B2', rss: '#F59E0B' };
+  const typeLabels = { api: 'API', web: 'Web scrape', rss: 'RSS' };
+
+  return (
+    <div className="card" style={{ marginBottom: 16, padding: '16px 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Intelligence Sources</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>{sources.totalSources} sources monitored</span>
+        </div>
+        {sources.lastScanned && (
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            Last scan: {new Date(sources.lastScanned).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+        {sources.sources.map(s => (
+          <div key={s.url} style={{ display: 'flex', gap: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-secondary, #F8FAFC)', border: '1px solid var(--border-color)' }}>
+            <div style={{ flexShrink: 0, marginTop: 1 }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: typeColors[s.type] + '20', color: typeColors[s.type] }}>
+                {typeLabels[s.type] || s.type.toUpperCase()}
+              </span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}>
+                {s.name}
+              </a>
+              {s.description && (
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>{s.description}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

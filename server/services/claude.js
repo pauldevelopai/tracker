@@ -591,6 +591,77 @@ Only extract cases that are clearly AI-related (AI training data, AI-generated c
 }
 
 /**
+ * Generate a deep 2-3 paragraph analysis of a single AI lawsuit for the knowledge base.
+ * Called per-case after extraction so it can be thorough and focused.
+ */
+export async function generateCaseAnalysis(caseData, sourceTexts = []) {
+  const caseContext = [
+    `Case: ${caseData.case_name}`,
+    `Parties: ${(caseData.plaintiffs || []).join(', ')} v. ${(caseData.defendants || []).join(', ')}`,
+    `Court: ${caseData.court || 'Unknown'} ${caseData.district ? `(${caseData.district})` : ''}`,
+    `Filed: ${caseData.filing_date || 'Unknown'}`,
+    `Status: ${caseData.status}`,
+    `Type: ${caseData.case_type}`,
+    caseData.key_issues?.length ? `Key issues: ${caseData.key_issues.join('; ')}` : '',
+    caseData.outcome ? `Outcome: ${caseData.outcome}` : '',
+    caseData.settlement_amount ? `Settlement: ${caseData.settlement_amount}` : '',
+    caseData.summary ? `Summary: ${caseData.summary}` : '',
+  ].filter(Boolean).join('\n');
+
+  const sourceContext = sourceTexts.length > 0
+    ? `\n\nSource material:\n${sourceTexts.join('\n\n').slice(0, 8000)}`
+    : '';
+
+  const result = await callClaude({
+    system: `You are a senior legal analyst and journalist specialising in AI, copyright, and technology law. Your audience is newsroom leaders and journalists who need to understand the practical implications of AI litigation for their industry.
+
+Write a comprehensive analysis of an AI lawsuit. Structure it as three clear paragraphs:
+
+**Paragraph 1 — Background & Facts**: Explain who the parties are, what was filed, when, and in which court. Describe the specific AI system or behaviour at the heart of the dispute. Be precise about dates and factual claims.
+
+**Paragraph 2 — Legal Arguments & Battleground**: Explain the core legal questions — what the plaintiffs allege, what the defendants argue, what precedents or legal doctrines are being tested (e.g. fair use, transformative use, GDPR, right of publicity). Note any significant rulings or motions already decided.
+
+**Paragraph 3 — Significance for Journalism & AI**: Explain why this case matters for the media industry, AI developers, and newsrooms specifically. What is at stake? What outcome would set a precedent and in which direction? How does this affect newsrooms considering AI tools for content creation, research, or workflows?
+
+Write in plain English. Be specific. Avoid vague generalisations. Total length: 300-450 words.`,
+    userContent: `${caseContext}${sourceContext}`,
+    maxTokens: 1200,
+    temperature: 0.3,
+  });
+
+  return result || null;
+}
+
+/**
+ * Format a case as a structured knowledge entry content block.
+ */
+export function formatCaseAsKnowledge(caseData) {
+  const lines = [
+    `# ${caseData.case_name}`,
+    '',
+    `**Status:** ${caseData.status}  |  **Type:** ${caseData.case_type}  |  **Jurisdiction:** ${caseData.jurisdiction || 'US Federal'}`,
+    `**Parties:** ${(caseData.plaintiffs || []).join(', ')} v. ${(caseData.defendants || []).join(', ')}`,
+    `**Court:** ${[caseData.court, caseData.district, caseData.circuit].filter(Boolean).join(' · ')}`,
+    caseData.judge ? `**Judge:** ${caseData.judge}` : null,
+    caseData.filing_date ? `**Filed:** ${caseData.filing_date}` : null,
+    caseData.last_update ? `**Last update:** ${caseData.last_update}` : null,
+    caseData.outcome ? `**Outcome:** ${caseData.outcome}` : null,
+    caseData.settlement_amount ? `**Settlement:** ${caseData.settlement_amount}` : null,
+    '',
+    caseData.key_issues?.length
+      ? `**Key legal issues:** ${caseData.key_issues.join(' · ')}`
+      : null,
+    '',
+    caseData.detailed_analysis || caseData.summary || '',
+    '',
+    caseData.curriculum_relevance ? `**Curriculum relevance:** ${caseData.curriculum_relevance}` : null,
+    caseData.case_url ? `**Court documents:** ${caseData.case_url}` : null,
+  ].filter(l => l !== null).join('\n');
+
+  return lines;
+}
+
+/**
  * Generate personalised learning tasks for a participant.
  */
 export async function generatePersonalisedTasks(contact, organisation, course, outcomes, skillLevel) {

@@ -2,6 +2,9 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import { runLawsuitTracker } from '../services/background-jobs.js';
 import { scanState } from '../services/scan-state.js';
+import { generateCaseAnalysis, formatCaseAsKnowledge } from '../services/claude.js';
+import { LAWSUIT_SOURCES_META, scrapeArticle } from '../services/web-scraper.js';
+import { createKnowledgeEntry } from '../services/knowledge.js';
 
 const router = Router();
 
@@ -82,6 +85,115 @@ router.get('/stats', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Configured scraping sources — shown in the sources panel on the frontend
+router.get('/sources', (req, res) => {
+  res.json({
+    sources: LAWSUIT_SOURCES_META,
+    lastScanned: scanState.lastCompletedAt || null,
+    totalSources: LAWSUIT_SOURCES_META.length,
+  });
+});
+
+// Generate (or regenerate) a deep AI analysis for a single case
+router.post('/:id/analyse', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM ai_lawsuits WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const c = rows[0];
+
+    // Scrape fresh text from source URLs to give Claude more material
+    const sourceTexts = [];
+    for (const url of [c.source_url, c.case_url].filter(Boolean).slice(0, 2)) {
+      try {
+        const scraped = await scrapeArticle(url);
+        if (scraped.success && scraped.text) {
+          sourceTexts.push(`Source: ${url}\n${scraped.title || ''}\n${scraped.text.slice(0, 3000)}`);
+        }
+      } catch { /* skip */ }
+    }
+
+    const analysis = await generateCaseAnalysis(c, sourceTexts);
+    if (!analysis) return res.status(500).json({ message: 'Analysis generation failed' });
+
+    await pool.query(
+      'UPDATE ai_lawsuits SET detailed_analysis = $1, analysis_generated_at = NOW(), updated_at = NOW() WHERE id = $2',
+      [analysis, req.params.id]
+    );
+
+    res.json({ detailed_analysis: analysis });
+  } catch (err) {
+    console.error('[Analyse]', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Add a case to Holly's knowledge base (or update existing entry)
+router.post('/:id/add-to-knowledge', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM ai_lawsuits WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    const c = rows[0];
+
+    // Generate analysis first if not yet done
+    let caseWithAnalysis = c;
+    if (!c.detailed_analysis) {
+      const sourceTexts = [];
+      for (const url of [c.source_url, c.case_url].filter(Boolean).slice(0, 2)) {
+        try {
+          const scraped = await scrapeArticle(url);
+          if (scraped.success && scraped.text) sourceTexts.push(scraped.text.slice(0, 3000));
+        } catch { /* skip */ }
+      }
+      const analysis = await generateCaseAnalysis(c, sourceTexts);
+      if (analysis) {
+        await pool.query(
+          'UPDATE ai_lawsuits SET detailed_analysis = $1, analysis_generated_at = NOW() WHERE id = $2',
+          [analysis, c.id]
+        );
+        caseWithAnalysis = { ...c, detailed_analysis: analysis };
+      }
+    }
+
+    const content = formatCaseAsKnowledge(caseWithAnalysis);
+    const tags = [
+      'ai-law', 'ai-litigation', c.case_type,
+      ...(c.defendants || []).map(d => d.toLowerCase().replace(/\s+/g, '-').slice(0, 30)),
+      ...(c.key_issues || []).map(k => k.toLowerCase().replace(/\s+/g, '-').slice(0, 30)),
+    ].filter(Boolean).slice(0, 15);
+
+    // Upsert: if already linked, update the entry; otherwise create new
+    if (c.knowledge_entry_id) {
+      await pool.query(
+        'UPDATE knowledge_entries SET content = $1, title = $2 WHERE id = $3',
+        [content, c.case_name + ' — AI Lawsuit', c.knowledge_entry_id]
+      );
+      res.json({ knowledge_entry_id: c.knowledge_entry_id, updated: true });
+    } else {
+      const knowledgeId = await createKnowledgeEntry({
+        category: 'regulatory_change',
+        subcategory: 'ai_legal_framework',
+        title: `${c.case_name} — AI Lawsuit`,
+        content,
+        sourceType: 'ai_lawsuit_tracker',
+        sourceId: c.id,
+        sourceDescription: `AI lawsuit tracker — ${c.case_type} case, ${c.jurisdiction || 'US Federal'}`,
+        confidence: 0.85,
+        tags,
+      });
+
+      await pool.query(
+        'UPDATE ai_lawsuits SET knowledge_entry_id = $1, updated_at = NOW() WHERE id = $2',
+        [knowledgeId, c.id]
+      );
+
+      res.json({ knowledge_entry_id: knowledgeId, created: true });
+    }
+  } catch (err) {
+    console.error('[AddToKnowledge]', err);
+    res.status(500).json({ message: err.message });
   }
 });
 

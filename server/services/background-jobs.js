@@ -1,5 +1,5 @@
 import pool from '../db/pool.js';
-import { draftSocialPost, draftColdEmail, researchIndustryTrends, generateBusinessSummary, analyseFeedbackTrends, classifyNewsletterContent, generateDailyDigest, analyzeLawsuitContent } from './claude.js';
+import { draftSocialPost, draftColdEmail, researchIndustryTrends, generateBusinessSummary, analyseFeedbackTrends, classifyNewsletterContent, generateDailyDigest, analyzeLawsuitContent, generateCaseAnalysis, formatCaseAsKnowledge } from './claude.js';
 import { searchEmails, readEmail, getLabelId, getConnectionStatus } from './gmail.js';
 import { createKnowledgeEntry } from './knowledge.js';
 import { generateEmbedding, toPgVector } from './embeddings.js';
@@ -998,19 +998,54 @@ export async function runLawsuitTracker() {
               ]
             );
 
-            // Seed a filing event for the new case
-            const { rows: newRow } = await pool.query('SELECT id FROM ai_lawsuits WHERE case_name = $1', [lawsuit.case_name]);
+            // Seed a filing event + generate deep analysis + sync to knowledge
+            const { rows: newRow } = await pool.query('SELECT * FROM ai_lawsuits WHERE case_name = $1', [lawsuit.case_name]);
             if (newRow.length > 0) {
+              const newCase = newRow[0];
+
+              // Filing event
               await pool.query(
                 `INSERT INTO ai_lawsuit_events (lawsuit_id, event_date, event_type, title, description, source_url)
                  VALUES ($1, $2::date, 'filing', 'Case discovered', $3, $4)`,
                 [
-                  newRow[0].id,
+                  newCase.id,
                   lawsuit.filing_date || lawsuit.last_update || new Date().toISOString().split('T')[0],
                   `Identified via automated scan. ${lawsuit.summary ? lawsuit.summary.slice(0, 200) : ''}`.trim(),
                   article.url || null,
                 ]
               );
+
+              // Generate detailed analysis (non-blocking — don't hold up the scan)
+              generateCaseAnalysis(newCase, [article.text || article.description || ''].filter(Boolean)).then(async analysis => {
+                if (!analysis) return;
+                await pool.query(
+                  'UPDATE ai_lawsuits SET detailed_analysis = $1, analysis_generated_at = NOW() WHERE id = $2',
+                  [analysis, newCase.id]
+                );
+
+                // Auto-sync curriculum-relevant cases to Holly's knowledge base
+                if (newCase.is_curriculum_relevant) {
+                  const caseWithAnalysis = { ...newCase, detailed_analysis: analysis };
+                  const content = formatCaseAsKnowledge(caseWithAnalysis);
+                  const tags = ['ai-law', 'ai-litigation', newCase.case_type, ...(newCase.defendants || []).map(d => d.toLowerCase().replace(/\s+/g, '-').slice(0, 30))].slice(0, 12);
+                  try {
+                    const knowledgeId = await createKnowledgeEntry({
+                      category: 'regulatory_change',
+                      subcategory: 'ai_legal_framework',
+                      title: `${newCase.case_name} — AI Lawsuit`,
+                      content,
+                      sourceType: 'ai_lawsuit_tracker',
+                      sourceId: newCase.id,
+                      sourceDescription: `AI lawsuit tracker — ${newCase.case_type} case`,
+                      confidence: 0.85,
+                      tags,
+                    });
+                    await pool.query('UPDATE ai_lawsuits SET knowledge_entry_id = $1 WHERE id = $2', [knowledgeId, newCase.id]);
+                  } catch (ke) {
+                    console.error('[LawsuitTracker] Knowledge sync failed:', ke.message);
+                  }
+                }
+              }).catch(e => console.error('[LawsuitTracker] Analysis gen failed:', e.message));
             }
             newCases++;
             updateScan({ newCases });
