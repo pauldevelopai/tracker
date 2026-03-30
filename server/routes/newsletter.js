@@ -34,9 +34,9 @@ router.get('/digest/:date', async (req, res) => {
       [req.params.date]
     );
 
-    // Get items for this date
+    // Get items for this date (excluding rejected)
     const { rows: items } = await pool.query(
-      'SELECT * FROM newsletter_items WHERE digest_date::date = $1::date ORDER BY is_curriculum_relevant DESC, category, received_at',
+      'SELECT * FROM newsletter_items WHERE digest_date::date = $1::date AND is_rejected = false ORDER BY is_curriculum_relevant DESC, category, received_at',
       [req.params.date]
     );
 
@@ -56,7 +56,7 @@ router.get('/digest/:date', async (req, res) => {
 router.get('/curriculum', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM newsletter_items WHERE is_curriculum_relevant = true
+      `SELECT * FROM newsletter_items WHERE is_curriculum_relevant = true AND is_rejected = false
        ORDER BY received_at DESC LIMIT 50`
     );
     res.json(rows);
@@ -266,6 +266,75 @@ router.post('/fetch-web', async (req, res) => {
   } catch (err) {
     console.error('Web fetch error:', err);
     res.status(500).json({ message: err.message || 'Web fetch failed' });
+  }
+});
+
+// Reject an item (hides it from industry intelligence list)
+router.post('/:id/reject', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE newsletter_items SET is_rejected = true, rejected_at = NOW() WHERE id = $1 RETURNING id`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// Re-classify items for a date to find curriculum-relevant ones
+router.post('/classify-items', async (req, res) => {
+  try {
+    const targetDate = req.body.date || new Date().toISOString().split('T')[0];
+
+    const { rows: sectors } = await pool.query('SELECT name FROM sectors LIMIT 20');
+    const sectorNames = sectors.map(s => s.name).length > 0
+      ? sectors.map(s => s.name)
+      : ['media', 'legal', 'general'];
+
+    // Get all non-curriculum items for the date that have text to classify
+    const { rows: items } = await pool.query(
+      `SELECT * FROM newsletter_items WHERE digest_date::date = $1::date AND is_rejected = false ORDER BY received_at DESC`,
+      [targetDate]
+    );
+
+    if (items.length === 0) return res.json({ updated: 0, curriculumItems: [] });
+
+    let updated = 0;
+    for (const item of items) {
+      const text = [item.subject, item.summary, item.raw_text].filter(Boolean).join('\n\n');
+      if (!text.trim()) continue;
+      try {
+        const classified = await classifyNewsletterContent(text.slice(0, 8000), sectorNames);
+        if (!classified || classified.length === 0) continue;
+        const top = classified[0];
+        if (top.is_curriculum_relevant !== item.is_curriculum_relevant ||
+            top.curriculum_relevance_reason !== item.curriculum_relevance_reason) {
+          await pool.query(
+            `UPDATE newsletter_items SET is_curriculum_relevant = $1, curriculum_relevance_reason = $2,
+             category = COALESCE($3, category), relevant_sectors = COALESCE($4, relevant_sectors)
+             WHERE id = $5`,
+            [top.is_curriculum_relevant, top.curriculum_relevance_reason || null,
+             top.category || null, top.relevant_sectors?.length ? top.relevant_sectors : null,
+             item.id]
+          );
+          updated++;
+        }
+      } catch (e) {
+        console.error('classify-items: error classifying item', item.id, e.message);
+      }
+    }
+
+    const { rows: curriculumItems } = await pool.query(
+      `SELECT * FROM newsletter_items WHERE is_curriculum_relevant = true AND is_rejected = false ORDER BY received_at DESC LIMIT 50`
+    );
+
+    res.json({ updated, total: items.length, curriculumItems });
+  } catch (err) {
+    console.error('Classify items error:', err);
+    res.status(500).json({ message: err.message || 'Classification failed' });
   }
 });
 

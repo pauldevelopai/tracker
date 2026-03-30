@@ -1,0 +1,2 @@
+ALTER TABLE newsletter_items ADD COLUMN IF NOT EXISTS is_rejected BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE newsletter_items ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ;

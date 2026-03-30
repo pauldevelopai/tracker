@@ -63,15 +63,39 @@ function itemMatchesFilter(item, filter) {
   return filter.keywords.some(kw => text.includes(kw));
 }
 
+function renderMarkdown(text) {
+  if (!text) return '';
+  let t = text;
+  t = t.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
+  t = t.replace(/<[^>]+>/g, '');
+  t = t.replace(/(https?:\/\/[^\s"]+)"[^)]*\)/g, '$1');
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#6366F1;text-decoration:underline">$1</a>');
+  t = t.replace(/(?<!href=")(https?:\/\/[^\s<)"]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#6366F1;text-decoration:underline;word-break:break-all">$1</a>');
+  return t;
+}
+
 export default function NewsletterDigest() {
   const [activeTab, setActiveTab] = useState('digest');
-  const [items, setItems] = useState([]);                   // date-specific digest items
-  const [curriculumItems, setCurriculumItems] = useState([]); // all curriculum items
+  const [items, setItems] = useState([]);
+  const [curriculumItems, setCurriculumItems] = useState([]);
   const [digest, setDigest] = useState(null);
-  const [curriculumDigest, setCurriculumDigest] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [curriculumDate, setCurriculumDate] = useState(new Date().toISOString().split('T')[0]);
   const [settings, setSettings] = useState({});
   const [archive, setArchive] = useState([]);
+
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [includeGmail, setIncludeGmail] = useState(true);
+  const [includeWeb, setIncludeWeb] = useState(false);
+  const [storiesPerDay, setStoriesPerDay] = useState(10);
+
+  const [regenerating, setRegenerating] = useState(false);
+  const [classifying, setClassifying] = useState(false);
+  const [editingDigest, setEditingDigest] = useState(false);
+  const [editedDigest, setEditedDigest] = useState('');
+  const [publishing, setPublishing] = useState(false);
 
   function loadDigest() {
     return apiFetch(`/newsletter/digest/${selectedDate}`).then(d => {
@@ -94,7 +118,7 @@ export default function NewsletterDigest() {
 
   useEffect(() => {
     loadSettings();
-    loadCurriculum(); // load curriculum on mount for tab count
+    loadCurriculum();
     apiFetch('/newsletter/archive').then(a => {
       setArchive(a);
       if (a.length > 0 && a[0].digest_date) {
@@ -124,10 +148,10 @@ export default function NewsletterDigest() {
     if (activeTab === 'digest') loadDigest(); else loadCurriculum();
   }
 
-  const [activeFilters, setActiveFilters] = useState([]);
-  const [includeGmail, setIncludeGmail] = useState(true);
-  const [includeWeb, setIncludeWeb] = useState(false);
-  const [storiesPerDay, setStoriesPerDay] = useState(10);
+  async function rejectItem(id) {
+    await apiFetch(`/newsletter/${id}/reject`, { method: 'POST' });
+    setItems(prev => prev.filter(i => i.id !== id));
+  }
 
   function toggleFilter(key) {
     setActiveFilters(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
@@ -148,73 +172,10 @@ export default function NewsletterDigest() {
     return list;
   }
 
-  const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
-
-  async function generateCurriculumBriefing() {
-    setGeneratingCurriculum(true);
-    try {
-      const result = await apiFetch('/newsletter/curriculum-digest', {
-        method: 'POST',
-        timeout: 300000,
-      });
-      setCurriculumDigest(result.digest);
-    } catch (err) {
-      alert('Generation failed: ' + err.message);
-    } finally {
-      setGeneratingCurriculum(false);
-    }
-  }
-
-  const [regenerating, setRegenerating] = useState(false);
-  const [editingDigest, setEditingDigest] = useState(false);
-  const [editedDigest, setEditedDigest] = useState('');
-  const [publishing, setPublishing] = useState(false);
-
-  function startEditDigest() {
-    setEditedDigest(digest || '');
-    setEditingDigest(true);
-  }
-
-  function saveDigestEdit() {
-    setDigest(editedDigest);
-    setEditingDigest(false);
-    // Persist to archive table
-    apiFetch(`/newsletter/digest/${selectedDate}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content: editedDigest }),
-    }).catch(() => {});
-  }
-
-  async function publishTo(platform) {
-    const content = digest || '';
-    if (!content) return alert('No digest to publish');
-    setPublishing(true);
-    try {
-      // Create a social post draft with the digest content
-      await apiFetch('/social-posts', {
-        method: 'POST',
-        body: JSON.stringify({
-          platform,
-          content: platform === 'linkedin'
-            ? content.replace(/─+/g, '').replace(/\n{3,}/g, '\n\n').trim()
-            : content,
-          status: 'draft',
-          ai_generated: true,
-        }),
-      });
-      alert(`Draft created for ${platform}. Go to Marketing > Social Content to review and publish.`);
-    } catch (err) {
-      alert('Error: ' + err.message);
-    } finally {
-      setPublishing(false);
-    }
-  }
-
   async function regenerateDigest() {
     if (!includeGmail && !includeWeb) return alert('Select at least one source (Gmail or Web).');
     setRegenerating(true);
     try {
-      // If web is selected, fetch web news first
       if (includeWeb) {
         await apiFetch('/newsletter/fetch-web', {
           method: 'POST',
@@ -237,7 +198,62 @@ export default function NewsletterDigest() {
     }
   }
 
-  // Digest tab: only non-curriculum items, filtered and capped
+  async function generateCurriculumItems() {
+    setClassifying(true);
+    try {
+      const result = await apiFetch('/newsletter/classify-items', {
+        method: 'POST',
+        body: JSON.stringify({ date: curriculumDate }),
+        timeout: 300000,
+      });
+      if (result.curriculumItems) setCurriculumItems(result.curriculumItems);
+      else await loadCurriculum();
+    } catch (err) {
+      alert('Classification failed: ' + err.message);
+    } finally {
+      setClassifying(false);
+    }
+  }
+
+  function startEditDigest() {
+    setEditedDigest(digest || '');
+    setEditingDigest(true);
+  }
+
+  function saveDigestEdit() {
+    setDigest(editedDigest);
+    setEditingDigest(false);
+    apiFetch(`/newsletter/digest/${selectedDate}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content: editedDigest }),
+    }).catch(() => {});
+  }
+
+  async function publishTo(platform) {
+    const content = digest || '';
+    if (!content) return alert('No digest to publish');
+    setPublishing(true);
+    try {
+      await apiFetch('/social-posts', {
+        method: 'POST',
+        body: JSON.stringify({
+          platform,
+          content: platform === 'linkedin'
+            ? content.replace(/─+/g, '').replace(/\n{3,}/g, '\n\n').trim()
+            : content,
+          status: 'draft',
+          ai_generated: true,
+        }),
+      });
+      alert(`Draft created for ${platform}. Go to Marketing > Social Content to review and publish.`);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  // Daily Briefing tab: only non-curriculum, non-rejected items
   const digestItems = applyFilters(items.filter(i => !i.is_curriculum_relevant)).slice(0, storiesPerDay);
 
   return (
@@ -259,11 +275,11 @@ export default function NewsletterDigest() {
         </button>
       </div>
 
+      {/* ── DAILY BRIEFING TAB ── */}
       {activeTab === 'digest' && (
         <div>
-          {/* Controls: date, sources, stories, generate */}
+          {/* Controls */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16, padding: '12px 14px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
-            {/* Row 1: date + sources + stories + generate */}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 type="date" value={selectedDate}
@@ -290,7 +306,7 @@ export default function NewsletterDigest() {
                 {regenerating ? (includeWeb ? 'Fetching web…' : 'Generating…') : 'Generate Briefing'}
               </button>
             </div>
-            {/* Row 2: Topic filters */}
+            {/* Topic filters */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Topic:</span>
               {BRIEFING_FILTERS.map(f => {
@@ -316,7 +332,7 @@ export default function NewsletterDigest() {
             </div>
           </div>
 
-          {/* Digest summary */}
+          {/* Digest */}
           {digest && (
             <div className="card" style={{ marginBottom: 20, padding: 20, borderLeft: '4px solid var(--accent)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -328,12 +344,8 @@ export default function NewsletterDigest() {
                   <button className="btn btn-secondary btn-small" onClick={editingDigest ? saveDigestEdit : startEditDigest} style={{ fontSize: 11 }}>
                     {editingDigest ? 'Save' : 'Edit'}
                   </button>
-                  <button className="btn btn-secondary btn-small" onClick={() => publishTo('linkedin')} disabled={publishing} style={{ fontSize: 11 }}>
-                    → LinkedIn
-                  </button>
-                  <button className="btn btn-secondary btn-small" onClick={() => publishTo('substack')} disabled={publishing} style={{ fontSize: 11 }}>
-                    → Substack
-                  </button>
+                  <button className="btn btn-secondary btn-small" onClick={() => publishTo('linkedin')} disabled={publishing} style={{ fontSize: 11 }}>→ LinkedIn</button>
+                  <button className="btn btn-secondary btn-small" onClick={() => publishTo('substack')} disabled={publishing} style={{ fontSize: 11 }}>→ Substack</button>
                 </div>
               </div>
               {editingDigest ? (
@@ -347,32 +359,20 @@ export default function NewsletterDigest() {
                 </div>
               ) : (
                 <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
-                  dangerouslySetInnerHTML={{ __html: (() => {
-                    let text = digest;
-                    // 1. Strip ALL HTML tags completely, preserving href URLs as markdown
-                    text = text.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
-                    text = text.replace(/<[^>]+>/g, ''); // nuke any remaining HTML
-                    // 2. Fix malformed patterns like: https://url" target... → just the URL
-                    text = text.replace(/(https?:\/\/[^\s"]+)"[^)]*\)/g, '$1');
-                    // 3. Convert markdown links [text](url) → clickable HTML
-                    text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-                      '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>');
-                    // 4. Convert remaining bare URLs → clickable
-                    text = text.replace(/(?<!href=")(https?:\/\/[^\s<)"]+)/g,
-                      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline; word-break: break-all">$1</a>');
-                    return text;
-                  })() }} />
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(digest) }} />
               )}
             </div>
           )}
 
-          {/* Non-curriculum items */}
+          {/* Industry Intelligence items */}
           {digestItems.length > 0 && (
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
-                Items ({digestItems.length})
+                Industry Intelligence ({digestItems.length})
               </h3>
-              {digestItems.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} />)}
+              {digestItems.map(item => (
+                <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} onReject={rejectItem} />
+              ))}
             </div>
           )}
 
@@ -380,67 +380,47 @@ export default function NewsletterDigest() {
             <div className="empty-state">
               <h3>No newsletter items for this date.</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                Run the Newsletter Digest background job from Settings to process your newsletters.
+                Select Gmail and/or Web sources above, then click Generate Briefing.
               </p>
             </div>
           )}
           {items.length > 0 && activeFilters.length > 0 && digestItems.length === 0 && (
             <div className="empty-state">
               <h3>No items match the selected filters.</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try selecting different filters or clear them to see all items.</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Try different filters or clear them.</p>
             </div>
           )}
         </div>
       )}
 
+      {/* ── CURRICULUM ITEMS TAB ── */}
       {activeTab === 'curriculum' && (
         <div>
-          {/* Generate curriculum briefing */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-            <button className="btn btn-primary btn-small" onClick={generateCurriculumBriefing} disabled={generatingCurriculum}>
-              {generatingCurriculum ? 'Generating…' : 'Generate Curriculum Briefing'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: '12px 14px', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
+            <input
+              type="date" value={curriculumDate}
+              onChange={e => setCurriculumDate(e.target.value)}
+              style={{ padding: '5px 10px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', fontSize: 13 }}
+            />
+            <button className="btn btn-primary btn-small" onClick={generateCurriculumItems} disabled={classifying}>
+              {classifying ? 'Identifying…' : 'Generate Items'}
             </button>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              Generates a briefing from all {curriculumItems.length} curriculum items
+              Re-classifies items for the selected date to find curriculum-relevant content
             </span>
           </div>
 
-          {/* Curriculum digest output */}
-          {curriculumDigest && (
-            <div className="card" style={{ marginBottom: 20, padding: 20, borderLeft: '4px solid var(--accent)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <AiBadge />
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>Curriculum Briefing</span>
-                </div>
-                <button className="btn btn-secondary btn-small" onClick={() => setCurriculumDigest(null)} style={{ fontSize: 11 }}>
-                  Dismiss
-                </button>
-              </div>
-              <div style={{ fontSize: 14, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}
-                dangerouslySetInnerHTML={{ __html: (() => {
-                  let text = curriculumDigest;
-                  text = text.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '[$2]($1)');
-                  text = text.replace(/<[^>]+>/g, '');
-                  text = text.replace(/(https?:\/\/[^\s"]+)"[^)]*\)/g, '$1');
-                  text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-                    '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline">$1</a>');
-                  text = text.replace(/(?<!href=")(https?:\/\/[^\s<)"]+)/g,
-                    '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #6366F1; text-decoration: underline; word-break: break-all">$1</a>');
-                  return text;
-                })() }} />
-            </div>
-          )}
-
-          {/* All curriculum items */}
           {curriculumItems.length === 0 ? (
             <div className="empty-state"><h3>No curriculum-relevant items found yet.</h3></div>
           ) : (
-            curriculumItems.map(item => <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} showDate />)
+            curriculumItems.map(item => (
+              <NewsItem key={item.id} item={item} onPromote={promoteToKnowledge} onToggle={toggleCurriculum} />
+            ))
           )}
         </div>
       )}
 
+      {/* ── PAST BRIEFINGS TAB ── */}
       {activeTab === 'archive' && (
         <div>
           <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Past Briefings</h3>
@@ -470,9 +450,10 @@ export default function NewsletterDigest() {
   );
 }
 
-function NewsItem({ item, onPromote, onToggle, showDate }) {
+function NewsItem({ item, onPromote, onToggle, onReject }) {
   const [tagging, setTagging] = useState(false);
   const [selectedTags, setSelectedTags] = useState([]);
+  const [rejecting, setRejecting] = useState(false);
 
   function toggleTag(tag) {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -484,6 +465,15 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
     setSelectedTags([]);
   }
 
+  async function handleReject() {
+    setRejecting(true);
+    try { await onReject(item.id); } finally { setRejecting(false); }
+  }
+
+  const pubDate = item.received_at
+    ? new Date(item.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
   return (
     <div className="card" style={{
       marginBottom: 6, padding: 14,
@@ -491,6 +481,7 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
+          {/* Category + tags row */}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4, flexWrap: 'wrap' }}>
             <span style={{
               fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 10,
@@ -500,26 +491,32 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
             {item.relevant_sectors?.length > 0 && item.relevant_sectors.map(s => (
               <span key={s} style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{s}</span>
             ))}
-            {showDate && item.received_at && (
-              <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{new Date(item.received_at).toLocaleDateString()}</span>
-            )}
           </div>
+
+          {/* Title */}
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{item.subject}</div>
+
+          {/* Summary */}
           {item.summary && <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{item.summary}</div>}
+
+          {/* Curriculum reason */}
           {item.curriculum_relevance_reason && (
             <div style={{ fontSize: 12, marginTop: 4, padding: '4px 8px', background: '#EEF2FF', borderRadius: 4, color: 'var(--accent)' }}>
               {item.curriculum_relevance_reason}
             </div>
           )}
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+
+          {/* Source + date — always visible */}
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {item.source_url ? (
               <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366F1', textDecoration: 'underline' }}>{item.sender}</a>
             ) : (
               <span>{item.sender}</span>
             )}
-            {item.received_at && <span style={{ color: '#94A3B8' }}>•</span>}
-            {item.received_at && <span>{new Date(item.received_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+            {pubDate && <span style={{ color: '#94A3B8' }}>•</span>}
+            {pubDate && <span style={{ fontWeight: 500 }}>{pubDate}</span>}
           </div>
+
           {/* Tag picker */}
           {tagging && (
             <div style={{ marginTop: 10, padding: '10px 12px', background: '#F8FAFC', borderRadius: 6, border: '1px solid var(--border-color)' }}>
@@ -549,7 +546,9 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 8, flexShrink: 0 }}>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8, flexShrink: 0, flexDirection: 'column', alignItems: 'flex-end' }}>
           {item.is_curriculum_relevant && !item.promoted_to_knowledge && !tagging && (
             <button className="btn btn-primary btn-small" onClick={() => setTagging(true)} style={{ fontSize: 10 }}>
               + Knowledge
@@ -561,6 +560,16 @@ function NewsItem({ item, onPromote, onToggle, showDate }) {
           <button className="btn btn-secondary btn-small" onClick={() => onToggle(item)} style={{ fontSize: 10 }}>
             {item.is_curriculum_relevant ? 'Not Curriculum' : 'Mark Curriculum'}
           </button>
+          {onReject && !item.is_curriculum_relevant && (
+            <button
+              className="btn btn-small"
+              onClick={handleReject}
+              disabled={rejecting}
+              style={{ fontSize: 10, background: 'transparent', border: '1px solid #EF4444', color: '#EF4444', cursor: 'pointer', borderRadius: 'var(--radius)', padding: '2px 8px' }}
+            >
+              {rejecting ? '…' : 'Reject'}
+            </button>
+          )}
         </div>
       </div>
     </div>
