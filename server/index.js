@@ -54,10 +54,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/portal', participantPortalRoutes);
 // Lawsuits: all authenticated users (admin + member roles)
 app.use('/api/lawsuits', requireAuth, lawsuitRoutes);
+// AI chatbot: all authenticated users
+app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
+// Feedback: all authenticated users can submit; admin can view/manage
+app.use('/api/feedback', requireAuth, feedbackRoutes);
 
 // ── Admin-only endpoints ───────────────────────────────────────────────────────
 // All routes below this point require role = 'admin'.
-// Non-admin users only have access to /api/lawsuits and /api/auth above.
 const admin = express.Router();
 admin.use(requireAuth);
 admin.use(requireRole('admin'));
@@ -80,7 +83,6 @@ admin.use('/gmail',                gmailRoutes);
 admin.use('/funders',              funderRoutes);
 admin.use('/funding-opportunities', sectorFilter, fundingOpportunityRoutes);
 admin.use('/dashboard',            sectorFilter, dashboardRoutes);
-admin.use('/ai-assistant',         aiAssistantRoutes);
 admin.use('/background-jobs',      backgroundJobRoutes);
 admin.use('/notifications',        notificationRoutes);
 admin.use('/knowledge',            knowledgeRoutes);
@@ -93,7 +95,6 @@ admin.use('/learning-journeys',    sectorFilter, learningJourneyRoutes);
 admin.use('/participant-tokens',   participantTokenRoutes);
 admin.use('/agent-conversations',  agentConversationRoutes);
 admin.use('/agent-actions',        agentActionRoutes);
-admin.use('/feedback',             feedbackRoutes);
 
 app.use('/api', admin);
 

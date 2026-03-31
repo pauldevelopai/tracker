@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { callClaude } from '../services/claude.js';
+import { requireRole } from '../middleware/auth.js';
 
 const router = Router();
 
-router.get('/', async (req, res) => {
+// ── Admin-only: list, update, delete, generate prompts ────────────────────────
+router.get('/', requireRole('admin'), async (req, res) => {
   try {
     const { status } = req.query;
     let query = 'SELECT f.*, t.name AS user_name FROM feedback f LEFT JOIN team_members t ON f.user_id = t.id';
@@ -34,7 +36,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('admin'), async (req, res) => {
   try {
     const { status, priority } = req.body;
     const { rows } = await pool.query(
@@ -49,7 +51,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.post('/:id/generate-prompt', async (req, res) => {
+router.post('/:id/generate-prompt', requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM feedback WHERE id = $1', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Feedback not found' });
@@ -82,7 +84,7 @@ Rules:
 });
 
 // Generate master prompt from all unaddressed feedback
-router.post('/generate-master-prompt', async (req, res) => {
+router.post('/generate-master-prompt', requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT content, page, category, priority FROM feedback WHERE status IN ('pending', 'in_progress') ORDER BY
@@ -120,7 +122,7 @@ Rules:
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('admin'), async (req, res) => {
   try {
     const { rowCount } = await pool.query('DELETE FROM feedback WHERE id = $1', [req.params.id]);
     if (rowCount === 0) return res.status(404).json({ message: 'Feedback not found' });
