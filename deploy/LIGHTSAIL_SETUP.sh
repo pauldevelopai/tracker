@@ -137,10 +137,23 @@ log "Running DB migrations…"
 
 # ── 6. pm2 ───────────────────────────────────────────────────────────────────
 log "Starting / reloading Node server via pm2…"
+# Clean up any previous mis-named process (older PM2 6.x treats the .cjs config
+# file as a plain script and names the app after the filename).
+pm2 delete ecosystem.production 2>/dev/null || true
+
 if pm2 list | grep -q holly-server; then
-  pm2 reload holly-server
+  pm2 reload holly-server --update-env
 else
-  pm2 start "$APP_DIR/deploy/ecosystem.production.cjs"
+  # Start the server directly by script + name, sidestepping the ecosystem file.
+  ( cd "$APP_DIR/server" && \
+    NODE_ENV=production PORT=3001 \
+    pm2 start index.js \
+      --name holly-server \
+      --max-memory-restart 512M \
+      --log-date-format "YYYY-MM-DD HH:mm:ss" \
+      --error /home/ubuntu/holly/logs/server-error.log \
+      --output /home/ubuntu/holly/logs/server-out.log \
+      --merge-logs )
   pm2 save
   # Install the pm2 startup hook (only the first time)
   sudo env PATH="$PATH" pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -n 1 | bash || true
