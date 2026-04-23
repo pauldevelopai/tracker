@@ -1,9 +1,73 @@
 import Anthropic from '@anthropic-ai/sdk';
 import config from '../config.js';
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL       = 'claude-sonnet-4-6';
+const MODEL_CHEAP = 'claude-sonnet-4-6';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
+
+// ── Classifier backend dispatch ─────────────────────────────────────────────
+// LLM_BACKEND=ollama  → local Gemma via Ollama (free, default)
+// LLM_BACKEND=anthropic → Claude Sonnet with prompt caching (paid)
+//
+// Lightsail prod will set LLM_BACKEND=ollama + OLLAMA_URL=<tailscale IP of Mac>
+// so the abstraction is the same; only the env differs.
+const LLM_BACKEND  = process.env.LLM_BACKEND  || 'ollama';
+const OLLAMA_URL   = process.env.OLLAMA_URL   || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma3:12b';
+
+async function callOllamaClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
+  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      messages: [
+        { role: 'system', content: cachedSystem },
+        { role: 'user', content: userContent },
+      ],
+      stream: false,
+      // JSON mode: Ollama forces the model to emit strict JSON, saves us from
+      // brittle regex extraction when the model decides to wrap output in
+      // backticks or add commentary.
+      format: 'json',
+      options: {
+        temperature,
+        num_predict: maxTokens,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Ollama ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  return data.message?.content || '';
+}
+
+async function callAnthropicClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
+  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  const message = await client.messages.create({
+    model: MODEL_CHEAP,
+    max_tokens: maxTokens,
+    temperature,
+    system: [{ type: 'text', text: cachedSystem, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userContent }],
+  });
+  return message.content[0].text;
+}
+
+/**
+ * Classifier call — backend-agnostic. Returns just the text. Errors bubble up.
+ *
+ * When LLM_BACKEND=ollama (default), runs locally against Gemma 3 via Ollama.
+ * When LLM_BACKEND=anthropic, uses Claude Sonnet with ephemeral prompt caching.
+ */
+export async function callClaudeClassifier({ cachedSystem, userContent, maxTokens = 600, temperature = 0.1 }) {
+  const args = { cachedSystem, userContent, maxTokens, temperature };
+  if (LLM_BACKEND === 'anthropic') return callAnthropicClassifier(args);
+  return callOllamaClassifier(args);
+}
 
 // Centralised API call with error handling and retries
 export async function callClaude({ system, userContent, maxTokens = 2000, messages = null, temperature = undefined }) {
@@ -33,6 +97,118 @@ export async function callClaude({ system, userContent, maxTokens = 2000, messag
     console.error('Claude API error:', err.message || err);
     throw new Error(`AI service error: ${err.message || 'Unknown error'}`);
   }
+}
+
+/**
+ * Public AI Legal chatbot.
+ *
+ * Answers questions about AI lawsuits + regulations, scoped strictly to what
+ * we have in the database (passed in as `contextItems`). The caller is
+ * responsible for retrieving the relevant items via FTS.
+ *
+ * Returns { reply, citations } where citations is an array of
+ * {kind, id, name} for the items the model referenced.
+ */
+export async function chatAboutAiLegal({ history = [], message, contextItems = [] }) {
+  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  const contextBlock = contextItems.length === 0 ? '(no relevant items found in database)' :
+    contextItems.map(c => {
+      if (c.kind === 'lawsuit') {
+        return [
+          `## Lawsuit [id=${c.id}]: ${c.name}`,
+          `Jurisdiction: ${c.jurisdiction} · Status: ${c.status} · Type: ${c.type}`,
+          c.parties ? `Parties: ${c.parties}` : null,
+          c.dates ? `Dates: ${c.dates}` : null,
+          c.summary ? `Summary: ${c.summary}` : null,
+        ].filter(Boolean).join('\n');
+      }
+      return [
+        `## Regulation [id=${c.id}]: ${c.name}`,
+        `Jurisdiction: ${c.jurisdiction} · Status: ${c.status} · Type: ${c.type}`,
+        c.regulator ? `Regulator: ${c.regulator}` : null,
+        c.dates ? `Dates: ${c.dates}` : null,
+        c.summary ? `Summary: ${c.summary}` : null,
+      ].filter(Boolean).join('\n');
+    }).join('\n\n');
+
+  const messages = history.map(m => ({ role: m.role, content: m.content }));
+  messages.push({
+    role: 'user',
+    content: `Context from the AI Legal database:\n\n${contextBlock}\n\n# User question\n${message}`,
+  });
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 900,
+    temperature: 0.2,
+    system: `You are the AI Legal research assistant for ailegal.co.za — a public tracker of AI lawsuits and AI regulations worldwide.
+
+Your job: answer questions about AI law, AI regulations, and specific cases or regulations, using ONLY the context block provided. If the context doesn't contain the answer, say so and suggest what the user could browse on the site.
+
+Rules:
+- Stay strictly on topic: AI law, AI regulations, and the specific cases + regulations we track.
+- If asked about anything else (general advice, personal legal help, unrelated topics), politely decline and redirect to the tracker.
+- Do NOT offer legal advice. Clarify that you're summarising public records, not providing counsel.
+- Cite items by their id in brackets: [lawsuit:<uuid>] or [regulation:<uuid>]. The frontend will render these as links.
+- Be concise. 2-4 short paragraphs is usually enough.
+- Use plain text — no markdown headings, no bold.
+- If the user's question is vague, ask a clarifying question instead of guessing.`,
+    messages,
+  });
+
+  const text = (response.content || [])
+    .filter(b => b.type === 'text')
+    .map(b => b.text)
+    .join('\n');
+
+  // Parse citation markers from the reply: [lawsuit:<uuid>] or [regulation:<uuid>]
+  const cited = new Set();
+  const citeRe = /\[(lawsuit|regulation):([0-9a-f-]{8,})\]/gi;
+  let m;
+  while ((m = citeRe.exec(text)) !== null) {
+    cited.add(`${m[1].toLowerCase()}:${m[2]}`);
+  }
+  const citations = contextItems.filter(c => cited.has(`${c.kind}:${c.id}`));
+
+  return { reply: text, citations };
+}
+
+/**
+ * Claude call with Anthropic's server-side web_search tool enabled.
+ *
+ * The API runs the search loop itself — we just get the final text response
+ * with the model's answer. Useful for "verify this against a primary source"
+ * prompts (date audits, fact-checks).
+ *
+ * Returns { text, citations } where citations is an array of {url, title}
+ * objects the model cited (may be empty if no search was needed).
+ */
+export async function callClaudeWithWebSearch({ system, userContent, maxTokens = 1500, maxUses = 5 }) {
+  if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  const params = {
+    model: MODEL,
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: userContent }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: maxUses }],
+  };
+  const message = await client.messages.create(params);
+
+  // Content blocks are a mix of text + tool_use + server_tool_use + web_search_tool_result
+  const textBlocks = (message.content || []).filter(b => b.type === 'text');
+  const text = textBlocks.map(b => b.text).join('\n');
+
+  // Harvest citations from any text blocks that carry them (new SDK feature)
+  const citations = [];
+  for (const b of textBlocks) {
+    if (Array.isArray(b.citations)) {
+      for (const c of b.citations) {
+        citations.push({ url: c.url, title: c.title });
+      }
+    }
+  }
+  return { text, citations };
 }
 
 import { buildEnrichedSystemPrompt, recordKnowledgeUsage, recordInteraction } from './knowledge.js';
@@ -656,6 +832,81 @@ export function formatCaseAsKnowledge(caseData) {
     '',
     caseData.curriculum_relevance ? `**Curriculum relevance:** ${caseData.curriculum_relevance}` : null,
     caseData.case_url ? `**Court documents:** ${caseData.case_url}` : null,
+  ].filter(l => l !== null).join('\n');
+
+  return lines;
+}
+
+/**
+ * Generate a deep Claude analysis for a single AI regulation.
+ */
+export async function generateRegulationAnalysis(regData, sourceTexts = []) {
+  const regContext = [
+    `Regulation: ${regData.regulation_name}${regData.short_name ? ` (${regData.short_name})` : ''}`,
+    `Jurisdiction: ${regData.jurisdiction}`,
+    regData.regulator ? `Regulator: ${regData.regulator}` : '',
+    `Status: ${regData.status}`,
+    regData.regulation_type ? `Type: ${regData.regulation_type}` : '',
+    regData.scope?.length ? `Scope: ${regData.scope.join('; ')}` : '',
+    regData.affected_sectors?.length ? `Affected sectors: ${regData.affected_sectors.join('; ')}` : '',
+    regData.proposed_date ? `Proposed: ${regData.proposed_date}` : '',
+    regData.enacted_date ? `Enacted: ${regData.enacted_date}` : '',
+    regData.effective_date ? `Effective: ${regData.effective_date}` : '',
+    regData.enforcement_date ? `Enforcement begins: ${regData.enforcement_date}` : '',
+    regData.key_provisions?.length ? `Key provisions: ${regData.key_provisions.join('; ')}` : '',
+    regData.penalties ? `Penalties: ${regData.penalties}` : '',
+    regData.extraterritorial_scope ? `Extraterritorial scope: ${regData.extraterritorial_scope}` : '',
+    regData.summary ? `Summary: ${regData.summary}` : '',
+  ].filter(Boolean).join('\n');
+
+  const sourceContext = sourceTexts.length > 0
+    ? `\n\nSource material:\n${sourceTexts.join('\n\n').slice(0, 8000)}`
+    : '';
+
+  const result = await callClaude({
+    system: `You are a senior policy analyst specialising in AI regulation, data protection, and technology law. Your audience is newsroom leaders, journalists, compliance officers, and legal professionals who need to understand the practical implications of AI regulation globally.
+
+Write a comprehensive analysis of an AI regulation. Structure it as three clear paragraphs:
+
+**Paragraph 1 — What the regulation is and where it came from**: Identify the full name of the regulation, the jurisdiction and regulator, its legal form (statute, directive, guidance, etc.), and the timeline from proposal to enactment to effect. Describe the concerns or incidents that drove it.
+
+**Paragraph 2 — Core obligations and scope**: Explain what the regulation actually requires. Who is in scope? What conduct is regulated? What are the key compliance obligations, risk tiers, transparency rules, or prohibited practices? What are the penalties? Is the scope extraterritorial?
+
+**Paragraph 3 — Significance and enforcement reality**: Explain why this regulation matters for media, AI developers, and organisations deploying AI. How does it interact with other regimes (GDPR, sectoral laws, other jurisdictions)? What's the enforcement trajectory — is this a paper tiger or a serious regulator? What should readers watch for next?
+
+Write in plain English. Be specific about articles, section numbers, dates, and thresholds where known. Avoid vague generalisations. Total length: 300-450 words.`,
+    userContent: `${regContext}${sourceContext}`,
+    maxTokens: 1200,
+    temperature: 0.3,
+  });
+
+  return result || null;
+}
+
+/**
+ * Format a regulation as a structured knowledge entry content block.
+ */
+export function formatRegulationAsKnowledge(regData) {
+  const lines = [
+    `# ${regData.regulation_name}${regData.short_name ? ` (${regData.short_name})` : ''}`,
+    '',
+    `**Status:** ${regData.status}  |  **Type:** ${regData.regulation_type || '—'}  |  **Jurisdiction:** ${regData.jurisdiction}`,
+    regData.regulator ? `**Regulator:** ${regData.regulator}` : null,
+    regData.proposed_date ? `**Proposed:** ${regData.proposed_date}` : null,
+    regData.enacted_date ? `**Enacted:** ${regData.enacted_date}` : null,
+    regData.effective_date ? `**Effective:** ${regData.effective_date}` : null,
+    regData.enforcement_date ? `**Enforcement begins:** ${regData.enforcement_date}` : null,
+    '',
+    regData.scope?.length ? `**Scope:** ${regData.scope.join(' · ')}` : null,
+    regData.affected_sectors?.length ? `**Affected sectors:** ${regData.affected_sectors.join(' · ')}` : null,
+    regData.key_provisions?.length ? `**Key provisions:**\n${regData.key_provisions.map(p => `- ${p}`).join('\n')}` : null,
+    regData.penalties ? `**Penalties:** ${regData.penalties}` : null,
+    regData.extraterritorial_scope ? `**Extraterritorial scope:** ${regData.extraterritorial_scope}` : null,
+    '',
+    regData.detailed_analysis || regData.summary || '',
+    '',
+    regData.curriculum_relevance ? `**Curriculum relevance:** ${regData.curriculum_relevance}` : null,
+    regData.official_url ? `**Official text:** ${regData.official_url}` : null,
   ].filter(l => l !== null).join('\n');
 
   return lines;

@@ -461,7 +461,91 @@ export default function LawsuitTracker() {
 function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate }) {
   const [analysing, setAnalysing] = useState(false);
   const [addingKnowledge, setAddingKnowledge] = useState(false);
+  const [generatingInsights, setGeneratingInsights] = useState(false);
+  const [scrapingSources, setScrapingSources] = useState(false);
+  const [syncingCL, setSyncingCL] = useState(false);
+  const [buildingTimeline, setBuildingTimeline] = useState(false);
   const [actionMsg, setActionMsg] = useState(null);
+
+  async function generateInsights(e) {
+    e.stopPropagation();
+    setGeneratingInsights(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/legal-sources/insights/lawsuit/${c.id}`, { method: 'POST' });
+      const cites = (r.written || []).reduce((a, w) => a + (w.citations_count || 0), 0);
+      setActionMsg({ type: 'success', text: `Insights generated — ${r.related_count} related entities, ${cites} citations` });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'Insights failed: ' + err.message });
+    } finally {
+      setGeneratingInsights(false);
+      setTimeout(() => setActionMsg(null), 8000);
+    }
+  }
+
+  async function scrapeSources(e) {
+    e.stopPropagation();
+    setScrapingSources(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/legal-sources/scrape-sources/lawsuit/${c.id}`, { method: 'POST' });
+      setActionMsg({ type: 'success', text: `Scraped — ${r.ok} ok, ${r.fail} failed of ${r.urls} URLs` });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'Scrape failed: ' + err.message });
+    } finally {
+      setScrapingSources(false);
+      setTimeout(() => setActionMsg(null), 8000);
+    }
+  }
+
+  async function buildTimeline(e) {
+    e.stopPropagation();
+    setBuildingTimeline(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/legal-sources/timeline/lawsuit/${c.id}`, { method: 'POST' });
+      setActionMsg({ type: 'success', text: `Timeline built — ${r.inserted} new events (of ${r.proposed_count} proposed, ${r.rejected} rejected as unsourced)` });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'Timeline failed: ' + err.message });
+    } finally {
+      setBuildingTimeline(false);
+      setTimeout(() => setActionMsg(null), 10000);
+    }
+  }
+
+  async function syncCourtListener(e) {
+    e.stopPropagation();
+    setSyncingCL(true);
+    setActionMsg(null);
+    try {
+      const r = await apiFetch(`/legal-sources/courtlistener/sync/${c.id}`, { method: 'POST' });
+      if (r.needs_auth) setActionMsg({ type: 'error', text: 'Needs COURTLISTENER_TOKEN in .env — docket bound but entries not synced' });
+      else if (r.needs_review) {
+        // Open a prompt to manually bind a docket ID from CL search candidates
+        const candidates = (r.candidates || []).slice(0, 5);
+        const list = candidates.length
+          ? '\n\nCandidates:\n' + candidates.map((h, i) => `  ${i + 1}. [sim ${(h.sim*100).toFixed(0)}%] ${h.caseName} (id=${h.id})`).join('\n')
+          : '';
+        const docketId = window.prompt(
+          `Auto-match was low-confidence (${(r.confidence*100).toFixed(0)}%). Paste the CourtListener docket ID to bind this case manually. Leave blank to skip.${list}`,
+          candidates[0]?.id || ''
+        );
+        if (docketId) {
+          const bind = await apiFetch(`/legal-sources/courtlistener/bind/${c.id}`, {
+            method: 'POST', body: JSON.stringify({ docket_id: docketId.trim() }),
+          });
+          setActionMsg({ type: 'success', text: `Bound docket ${bind.docket_id || docketId} — ${bind.inserted || 0} new events` });
+        } else {
+          setActionMsg({ type: 'error', text: 'No match confident enough for auto-bind. Skipped.' });
+        }
+      } else setActionMsg({ type: 'success', text: `Docket ${r.docket_id} synced — ${r.inserted} new events, ${r.duplicates} duplicates` });
+    } catch (err) {
+      setActionMsg({ type: 'error', text: 'CL sync failed: ' + err.message });
+    } finally {
+      setSyncingCL(false);
+      setTimeout(() => setActionMsg(null), 12000);
+    }
+  }
 
   async function generateAnalysis(e) {
     e.stopPropagation();
@@ -614,6 +698,44 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, onCaseUpdate 
             >
               {analysing ? '⏳ Generating…' : c.detailed_analysis ? '↻ Regenerate Analysis' : '✦ Generate Analysis'}
             </button>
+            <button
+              onClick={buildTimeline}
+              disabled={buildingTimeline}
+              className="btn btn-secondary btn-small"
+              style={{ fontSize: 11, opacity: buildingTimeline ? 0.6 : 1 }}
+              title="Claude + web_search enumerates every significant event with source URLs"
+            >
+              {buildingTimeline ? '⏳ Researching…' : '⏰ Build Timeline'}
+            </button>
+            <button
+              onClick={generateInsights}
+              disabled={generatingInsights}
+              className="btn btn-secondary btn-small"
+              style={{ fontSize: 11, opacity: generatingInsights ? 0.6 : 1 }}
+              title="RAG-backed industry impact + predicted outcome, published on the public detail page"
+            >
+              {generatingInsights ? '⏳ Thinking…' : '◇ Generate Insights'}
+            </button>
+            <button
+              onClick={scrapeSources}
+              disabled={scrapingSources}
+              className="btn btn-secondary btn-small"
+              style={{ fontSize: 11, opacity: scrapingSources ? 0.6 : 1 }}
+              title="Fetches every source URL, extracts title / author / publish date for richer detail page"
+            >
+              {scrapingSources ? '⏳ Scraping…' : '↻ Scrape Sources'}
+            </button>
+            {c.jurisdiction && /^US/i.test(c.jurisdiction) && (
+              <button
+                onClick={syncCourtListener}
+                disabled={syncingCL}
+                className="btn btn-secondary btn-small"
+                style={{ fontSize: 11, opacity: syncingCL ? 0.6 : 1 }}
+                title="Pulls the full docket from CourtListener (requires COURTLISTENER_TOKEN)"
+              >
+                {syncingCL ? '⏳ Syncing…' : '⚖ Sync CourtListener'}
+              </button>
+            )}
             <button
               onClick={addToKnowledge}
               disabled={addingKnowledge}

@@ -58,6 +58,30 @@ import LeadsPage from './pages/leads/LeadsPage.jsx';
 import MentoringPage from './pages/mentoring/MentoringPage.jsx';
 import OrganisationMap from './pages/map/OrganisationMap.jsx';
 import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
+import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
+import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
+import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
+import { lazy, Suspense } from 'react';
+import PublicLayout from './pages/public/PublicLayout.jsx';
+import PublicHome from './pages/public/PublicHome.jsx';
+import PublicLawsuitsList from './pages/public/PublicLawsuitsList.jsx';
+import PublicLawsuitDetail from './pages/public/PublicLawsuitDetail.jsx';
+import PublicRegulationsList from './pages/public/PublicRegulationsList.jsx';
+import PublicRegulationDetail from './pages/public/PublicRegulationDetail.jsx';
+// Code-split these — not on the critical path. Especially PublicExplore which
+// pulls in react-force-graph-2d + d3-force (~300KB gzipped on its own).
+const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
+const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
+const PublicSubmit   = lazy(() => import('./pages/public/PublicSubmit.jsx'));
+const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
+
+function LazyFallback() {
+  return (
+    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
+      Loading…
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -67,11 +91,31 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/portal" element={<ParticipantPortal />} />
+
+          {/* ── Public AI Legal site (ailegal.co.za) — no auth required ── */}
+          <Route path="/legal" element={<PublicLayout />}>
+            <Route index element={<PublicHome />} />
+            <Route path="lawsuits" element={<PublicLawsuitsList />} />
+            <Route path="lawsuits/:id" element={<PublicLawsuitDetail />} />
+            <Route path="regulations" element={<PublicRegulationsList />} />
+            <Route path="regulations/:id" element={<PublicRegulationDetail />} />
+            <Route path="explore"        element={<Suspense fallback={<LazyFallback />}><PublicExplore /></Suspense>} />
+            <Route path="sources"        element={<Suspense fallback={<LazyFallback />}><PublicSources /></Suspense>} />
+            <Route path="submit"         element={<Suspense fallback={<LazyFallback />}><PublicSubmit /></Suspense>} />
+            <Route path="use-cases"      element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="list" /></Suspense>} />
+            <Route path="use-cases/:id"  element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="detail" /></Suspense>} />
+            {/* Old path, now rolled into /legal/sources */}
+            <Route path="transparency" element={<Navigate to="/legal/sources" replace />} />
+          </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
 
               {/* ── Available to all authenticated users ── */}
               <Route path="/lawsuits" element={<LawsuitTracker />} />
+              <Route path="/regulation-tracker" element={<RegulationTracker />} />
+              <Route path="/legal-sources" element={<LegalSourcesPage />} />
+              <Route path="/use-cases-admin" element={<UseCasesAdmin />} />
 
               {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
               <Route element={<AdminRoute />}>

@@ -37,6 +37,11 @@ import agentConversationRoutes from './routes/agent-conversations.js';
 import agentActionRoutes from './routes/agent-actions.js';
 import feedbackRoutes from './routes/feedback.js';
 import lawsuitRoutes from './routes/lawsuits.js';
+import regulationRoutes from './routes/regulations.js';
+import legalSourcesRoutes from './routes/legal-sources.js';
+import usecasesRoutes from './routes/usecases.js';
+import publicRoutes from './routes/public.js';
+import publicHtmlRoutes from './routes/public-html.js';
 import { startScheduler } from './services/scheduler.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
@@ -50,10 +55,90 @@ app.use(cookieParser());
 // ── Open / limited-access endpoints ───────────────────────────────────────────
 // Auth: anyone
 app.use('/api/auth', authRoutes);
+// Public AI Legal surface (ailegal.co.za) — NO auth. Mount before any auth middleware.
+// /api/public/* is the original path the frontend uses. /api/v1/* is the same
+// router mounted under the versioned path — that's what third-party consumers
+// should call. We keep both live so the internal site keeps working while the
+// public API is formally versioned.
+app.use('/api/public', publicRoutes);
+
+// Server-rendered HTML for public detail pages with per-item OG tags.
+// Nginx (prod) proxies /lawsuits/:id, /regulations/:id, /usecases/:id here
+// so social crawlers see real titles/descriptions instead of the SPA default.
+app.use(publicHtmlRoutes);
+
+// OpenAPI spec + Redoc docs. Mounted before the rate-limited /api/v1 prefix so
+// loading the docs page doesn't count against a consumer's daily quota.
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve as pathResolve } from 'node:path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
+const openapiSpec = JSON.parse(readFileSync(pathResolve(__dirname, 'routes/api-v1/openapi.json'), 'utf8'));
+app.get('/api/v1/openapi.json', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.json(openapiSpec);
+});
+app.get('/api/v1/docs', (req, res) => {
+  // Redoc via CDN — single self-contained HTML page, no deps to install.
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Legal Public API — v1 docs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <style>body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+</head>
+<body>
+  <redoc spec-url="/api/v1/openapi.json"
+         theme='{"colors":{"primary":{"main":"#4F46E5"}},"typography":{"fontSize":"14px"}}'
+         hide-download-button="false"></redoc>
+  <script src="https://cdn.jsdelivr.net/npm/redoc@2/bundles/redoc.standalone.js"></script>
+</body>
+</html>`);
+});
+
+// /api/v1 adds the documented/versioned contract for third parties. Same
+// router as /api/public but with rate limiting + cache headers. Frontend
+// keeps using /api/public so cookie-auth flows (chat submissions etc.)
+// don't count against anyone's quota.
+import { apiRateLimit } from './middleware/api-rate-limit.js';
+app.use('/api/v1', apiRateLimit(), publicRoutes);
+
+// Discovery root for the public API — self-describes what's available. Useful
+// for consumers who land on /api/v1 without a path.
+app.get('/api/v1', (req, res) => {
+  res.json({
+    name: 'AI Legal Public API',
+    version: '1',
+    description: 'Global tracker of AI-related lawsuits, regulations, and legal use cases.',
+    docs: '/api/v1/docs',
+    openapi: '/api/v1/openapi.json',
+    endpoints: {
+      lawsuits:     { list: 'GET /api/v1/lawsuits', detail: 'GET /api/v1/lawsuits/:id' },
+      regulations:  { list: 'GET /api/v1/regulations', detail: 'GET /api/v1/regulations/:id' },
+      usecases:     { list: 'GET /api/v1/usecases', detail: 'GET /api/v1/usecases/:id' },
+      feed:         { combined: 'GET /api/v1/feed', atom: 'GET /api/v1/feed.atom', rss: 'GET /api/v1/feed.rss' },
+      sources:      'GET /api/v1/sources',
+      transparency: 'GET /api/v1/transparency',
+      submissions:  'POST /api/v1/submissions',
+      chat:         'POST /api/v1/chat',
+    },
+    licence: 'Data: CC-BY-4.0 with attribution to ailegal.co.za. Please cache responses responsibly.',
+    rate_limit: 'Currently unlimited and unauthenticated. Set User-Agent header identifying your app + contact email.',
+  });
+});
 // Participant portal: public, token-authenticated
 app.use('/api/portal', participantPortalRoutes);
 // Lawsuits: all authenticated users (admin + member roles)
 app.use('/api/lawsuits', requireAuth, lawsuitRoutes);
+// Regulations: all authenticated users (admin + member roles)
+app.use('/api/regulations', requireAuth, regulationRoutes);
+// Legal sources admin (manages the scraper source pool)
+app.use('/api/legal-sources', requireAuth, legalSourcesRoutes);
+// AI Legal use-cases CRUD (admin)
+app.use('/api/usecases', requireAuth, usecasesRoutes);
 // AI chatbot: all authenticated users
 app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage

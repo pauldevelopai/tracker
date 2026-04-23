@@ -8,7 +8,8 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "migrate": "cd server && node db/migrate.js",
     "seed": "cd server && node db/seed.js",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm run build",
+    "orchestrate": "cd server && node db/scripts/orchestrate.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

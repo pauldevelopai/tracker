@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useSectors } from '../context/SectorContext.jsx';
 import NotificationBell from './NotificationBell.jsx';
 
-const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits']);
+const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: '~' },
@@ -17,7 +17,10 @@ const navItems = [
   { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
   { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
-  { to: '/lawsuits', label: 'AI Lawsuit Tracker', icon: '~', group: 'Compliance' },
+  { to: '/lawsuits', label: 'AI Lawsuit Tracker', icon: '~', group: 'AI Legal' },
+  { to: '/regulation-tracker', label: 'AI Regulation Tracker', icon: '~', group: 'AI Legal' },
+  { to: '/use-cases-admin', label: 'AI Legal Use Cases', icon: '~', group: 'AI Legal' },
+  { to: '/legal-sources', label: 'Legal Sources & Agents', icon: '~', group: 'AI Legal' },
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },

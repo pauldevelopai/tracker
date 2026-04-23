@@ -1,0 +1,427 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Legal Public API",
+    "version": "1.0.0",
+    "description": "Programmatic access to the AI Legal dataset: global tracker of AI-related lawsuits, regulations, and legal use cases. All responses JSON. No auth required; free and unmetered during the preview period. Identify your app with a descriptive User-Agent so we can reach you if anything breaks.",
+    "contact": { "name": "AI Legal", "url": "https://ailegal.co.za" },
+    "license": { "name": "CC-BY-4.0", "url": "https://creativecommons.org/licenses/by/4.0/" }
+  },
+  "servers": [
+    { "url": "https://ailegal.co.za/api/v1", "description": "Production" },
+    { "url": "http://localhost:3001/api/v1", "description": "Local development" }
+  ],
+  "tags": [
+    { "name": "lawsuits",    "description": "AI-related court cases worldwide." },
+    { "name": "regulations", "description": "AI-specific statutes, directives, guidance, and enforcement actions." },
+    { "name": "usecases",    "description": "Real-world examples of lawyers and law firms using AI successfully." },
+    { "name": "feed",        "description": "Combined chronological stream of every tracked event." },
+    { "name": "meta",        "description": "Sources, transparency, and pipeline state." },
+    { "name": "community",   "description": "User-contributed submissions and chat." }
+  ],
+  "paths": {
+    "/lawsuits": {
+      "get": {
+        "tags": ["lawsuits"],
+        "summary": "List lawsuits",
+        "description": "Paginated list of AI-related lawsuits sorted by most recent legal development.",
+        "parameters": [
+          { "name": "page",         "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "pageSize",     "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "status",       "in": "query", "schema": { "$ref": "#/components/schemas/LawsuitStatus" }, "description": "Filter by case status." },
+          { "name": "case_type",    "in": "query", "schema": { "$ref": "#/components/schemas/LawsuitType" } },
+          { "name": "jurisdiction", "in": "query", "schema": { "type": "string", "example": "US Federal" } },
+          { "name": "defendant",    "in": "query", "schema": { "type": "string", "example": "OpenAI" }, "description": "Substring match on any defendant." },
+          { "name": "q",            "in": "query", "schema": { "type": "string", "example": "training data" }, "description": "Free-text search across case name, summary, and key issues." }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated result.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedLawsuits" } } }
+          }
+        }
+      }
+    },
+    "/lawsuits/{id}": {
+      "get": {
+        "tags": ["lawsuits"],
+        "summary": "Get one lawsuit",
+        "description": "Full lawsuit including events timeline, AI-generated insights, and source mentions.",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } ],
+        "responses": {
+          "200": { "description": "Lawsuit detail.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LawsuitDetail" } } } },
+          "404": { "description": "Not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/regulations": {
+      "get": {
+        "tags": ["regulations"],
+        "summary": "List regulations",
+        "description": "Paginated list of AI-related regulations. Only status in (enacted, in_force, partial_force, amended) shown.",
+        "parameters": [
+          { "name": "page",          "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "pageSize",      "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "status",        "in": "query", "schema": { "$ref": "#/components/schemas/RegulationStatus" } },
+          { "name": "regulation_type", "in": "query", "schema": { "$ref": "#/components/schemas/RegulationType" } },
+          { "name": "jurisdiction",  "in": "query", "schema": { "type": "string", "example": "EU" } },
+          { "name": "scope",         "in": "query", "schema": { "type": "string" }, "description": "Substring match on scope entries." },
+          { "name": "sector",        "in": "query", "schema": { "type": "string" }, "description": "Substring match on affected_sectors." },
+          { "name": "q",             "in": "query", "schema": { "type": "string", "example": "generative AI" } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated result.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedRegulations" } } } }
+        }
+      }
+    },
+    "/regulations/{id}": {
+      "get": {
+        "tags": ["regulations"],
+        "summary": "Get one regulation",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } ],
+        "responses": {
+          "200": { "description": "Regulation detail.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RegulationDetail" } } } },
+          "404": { "description": "Not found." }
+        }
+      }
+    },
+    "/usecases": {
+      "get": {
+        "tags": ["usecases"],
+        "summary": "List use cases",
+        "description": "Verified examples of law firms and lawyers using AI successfully.",
+        "parameters": [
+          { "name": "page",     "in": "query", "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } },
+          { "name": "firm_type", "in": "query", "schema": { "type": "string", "enum": ["biglaw", "boutique", "solo", "inhouse", "government", "nonprofit", "legaltech", "other"] } },
+          { "name": "jurisdiction", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } },
+          { "name": "q",        "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated result.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PaginatedUseCases" } } } }
+        }
+      }
+    },
+    "/usecases/{id}": {
+      "get": {
+        "tags": ["usecases"],
+        "summary": "Get one use case",
+        "parameters": [ { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } } ],
+        "responses": {
+          "200": { "description": "Use case detail.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UseCase" } } } },
+          "404": { "description": "Not found." }
+        }
+      }
+    },
+    "/feed": {
+      "get": {
+        "tags": ["feed"],
+        "summary": "Combined chronological feed",
+        "description": "All lawsuit + regulation events interleaved most-recent-first. Use /feed.rss or /feed.atom for feed-reader consumption.",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Array of feed items.", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/FeedItem" } } } } }
+        }
+      }
+    },
+    "/feed.rss": {
+      "get": {
+        "tags": ["feed"],
+        "summary": "RSS 2.0 feed",
+        "description": "RSS 2.0 feed of recent events — drop into any feed reader.",
+        "responses": { "200": { "description": "RSS XML.", "content": { "application/rss+xml": { "schema": { "type": "string" } } } } }
+      }
+    },
+    "/feed.atom": {
+      "get": {
+        "tags": ["feed"],
+        "summary": "Atom 1.0 feed",
+        "responses": { "200": { "description": "Atom XML.", "content": { "application/atom+xml": { "schema": { "type": "string" } } } } }
+      }
+    },
+    "/sources": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "List ingest sources",
+        "description": "Every source the pipeline scrapes (regulators, courts, legal press, NGOs, social).",
+        "responses": { "200": { "description": "Grouped source list." } }
+      }
+    },
+    "/transparency": {
+      "get": {
+        "tags": ["meta"],
+        "summary": "Pipeline transparency",
+        "description": "Stats on ingest volume, triage rates, source verification, and recent runs.",
+        "responses": { "200": { "description": "Stats object." } }
+      }
+    },
+    "/submissions": {
+      "post": {
+        "tags": ["community"],
+        "summary": "Submit a new case, regulation, or event",
+        "description": "Community submissions go into a review queue and are added after admin approval. Rate-limited 5/hour per IP.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SubmissionInput" } } }
+        },
+        "responses": {
+          "201": { "description": "Submission accepted." },
+          "400": { "description": "Validation error." },
+          "429": { "description": "Rate limit exceeded." }
+        }
+      }
+    },
+    "/chat": {
+      "post": {
+        "tags": ["community"],
+        "summary": "Natural-language Q&A over the AI Legal corpus",
+        "description": "Claude-powered chat scoped to AI law and regulation topics. Returns a short answer plus citation chips (lawsuit / regulation UUIDs referenced). Rate-limited 20/hour per IP.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["question"],
+            "properties": {
+              "question": { "type": "string", "example": "What is the latest development in NYT v. OpenAI?" }
+            }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Chat answer with citations." },
+          "400": { "description": "Missing question." },
+          "429": { "description": "Rate limit exceeded." }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "message": { "type": "string" } }
+      },
+      "LawsuitStatus": { "type": "string", "enum": ["active", "appealing", "settled", "dismissed", "decided"] },
+      "LawsuitType":   { "type": "string", "enum": ["copyright", "privacy", "defamation", "labour", "contract", "other"] },
+      "RegulationStatus": { "type": "string", "enum": ["proposed", "draft", "consultation", "enacted", "in_force", "partial_force", "amended", "repealed", "superseded"] },
+      "RegulationType":   { "type": "string", "enum": ["statute", "regulation", "directive", "guidance", "executive_order", "standard", "voluntary_code", "court_ruling"] },
+      "EventType": { "type": "string", "enum": ["filing", "hearing", "ruling", "settlement", "dismissal", "decision", "appeal", "amendment", "update", "enacted", "took_effect", "enforcement_action", "guidance_issued", "proposed", "amended", "repealed"] },
+
+      "LawsuitListItem": {
+        "type": "object",
+        "properties": {
+          "id":             { "type": "string", "format": "uuid" },
+          "case_name":      { "type": "string", "example": "Bartz v. Anthropic" },
+          "plaintiffs":     { "type": "array", "items": { "type": "string" } },
+          "defendants":     { "type": "array", "items": { "type": "string" } },
+          "court":          { "type": "string", "nullable": true, "example": "US District Court" },
+          "judge":          { "type": "string", "nullable": true },
+          "jurisdiction":   { "type": "string", "example": "US Federal" },
+          "district":       { "type": "string", "nullable": true },
+          "circuit":        { "type": "string", "nullable": true },
+          "status":         { "$ref": "#/components/schemas/LawsuitStatus" },
+          "case_type":      { "$ref": "#/components/schemas/LawsuitType" },
+          "key_issues":     { "type": "array", "items": { "type": "string" } },
+          "filing_date":    { "type": "string", "format": "date", "nullable": true },
+          "last_update":    { "type": "string", "format": "date", "nullable": true },
+          "next_deadline":  { "type": "string", "format": "date", "nullable": true },
+          "next_deadline_notes": { "type": "string", "nullable": true },
+          "outcome":        { "type": "string", "nullable": true },
+          "settlement_amount": { "type": "string", "nullable": true },
+          "case_url":       { "type": "string", "format": "uri", "nullable": true },
+          "source_url":     { "type": "string", "format": "uri", "nullable": true },
+          "source_urls":    { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "summary":        { "type": "string", "nullable": true },
+          "detailed_analysis": { "type": "string", "nullable": true },
+          "tags":           { "type": "array", "items": { "type": "string" } },
+          "updated_at":     { "type": "string", "format": "date-time" },
+          "latest_event_date":        { "type": "string", "format": "date", "nullable": true },
+          "latest_event_type":        { "$ref": "#/components/schemas/EventType" },
+          "latest_event_title":       { "type": "string", "nullable": true },
+          "latest_event_description": { "type": "string", "nullable": true }
+        }
+      },
+      "LawsuitDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/LawsuitListItem" },
+          {
+            "type": "object",
+            "properties": {
+              "events":   { "type": "array", "items": { "$ref": "#/components/schemas/Event" } },
+              "insights": { "type": "array", "items": { "$ref": "#/components/schemas/Insight" } },
+              "mentions": { "type": "array", "items": { "$ref": "#/components/schemas/Mention" } }
+            }
+          }
+        ]
+      },
+
+      "RegulationListItem": {
+        "type": "object",
+        "properties": {
+          "id":                     { "type": "string", "format": "uuid" },
+          "regulation_name":        { "type": "string", "example": "Regulation (EU) 2024/1689 — Artificial Intelligence Act" },
+          "short_name":             { "type": "string", "nullable": true, "example": "EU AI Act" },
+          "jurisdiction":           { "type": "string" },
+          "regulator":              { "type": "string", "nullable": true },
+          "status":                 { "$ref": "#/components/schemas/RegulationStatus" },
+          "regulation_type":        { "$ref": "#/components/schemas/RegulationType" },
+          "scope":                  { "type": "array", "items": { "type": "string" } },
+          "affected_sectors":       { "type": "array", "items": { "type": "string" } },
+          "proposed_date":          { "type": "string", "format": "date", "nullable": true },
+          "enacted_date":           { "type": "string", "format": "date", "nullable": true },
+          "effective_date":         { "type": "string", "format": "date", "nullable": true },
+          "enforcement_date":       { "type": "string", "format": "date", "nullable": true },
+          "next_milestone":         { "type": "string", "format": "date", "nullable": true },
+          "next_milestone_notes":   { "type": "string", "nullable": true },
+          "key_provisions":         { "type": "array", "items": { "type": "string" } },
+          "penalties":              { "type": "string", "nullable": true },
+          "extraterritorial_scope": { "type": "string", "nullable": true },
+          "official_url":           { "type": "string", "format": "uri", "nullable": true },
+          "source_url":             { "type": "string", "format": "uri", "nullable": true },
+          "source_urls":            { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "summary":                { "type": "string", "nullable": true },
+          "detailed_analysis":      { "type": "string", "nullable": true },
+          "tags":                   { "type": "array", "items": { "type": "string" } },
+          "updated_at":             { "type": "string", "format": "date-time" },
+          "latest_event_date":      { "type": "string", "format": "date", "nullable": true },
+          "latest_event_type":      { "$ref": "#/components/schemas/EventType" },
+          "latest_event_title":     { "type": "string", "nullable": true },
+          "latest_event_description": { "type": "string", "nullable": true }
+        }
+      },
+      "RegulationDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/RegulationListItem" },
+          {
+            "type": "object",
+            "properties": {
+              "events":   { "type": "array", "items": { "$ref": "#/components/schemas/Event" } },
+              "insights": { "type": "array", "items": { "$ref": "#/components/schemas/Insight" } },
+              "mentions": { "type": "array", "items": { "$ref": "#/components/schemas/Mention" } }
+            }
+          }
+        ]
+      },
+
+      "UseCase": {
+        "type": "object",
+        "properties": {
+          "id":                { "type": "string", "format": "uuid" },
+          "firm_name":         { "type": "string", "example": "Allen & Overy" },
+          "firm_type":         { "type": "string", "enum": ["biglaw", "boutique", "solo", "inhouse", "government", "nonprofit", "legaltech", "other"] },
+          "jurisdiction":      { "type": "string" },
+          "use_case_title":    { "type": "string" },
+          "summary":           { "type": "string" },
+          "tools_used":        { "type": "array", "items": { "type": "string" } },
+          "categories":        { "type": "array", "items": { "type": "string" } },
+          "outcome":           { "type": "string", "nullable": true },
+          "quantified_impact": { "type": "string", "nullable": true },
+          "source_url":        { "type": "string", "format": "uri", "nullable": true },
+          "source_urls":       { "type": "array", "items": { "type": "string", "format": "uri" } },
+          "source_name":       { "type": "string", "nullable": true },
+          "author":            { "type": "string", "nullable": true },
+          "published_at":      { "type": "string", "format": "date", "nullable": true },
+          "tags":              { "type": "array", "items": { "type": "string" } },
+          "updated_at":        { "type": "string", "format": "date-time" }
+        }
+      },
+
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id":              { "type": "string", "format": "uuid" },
+          "event_date":      { "type": "string", "format": "date", "nullable": true },
+          "event_type":      { "$ref": "#/components/schemas/EventType" },
+          "title":           { "type": "string", "nullable": true },
+          "description":     { "type": "string", "nullable": true },
+          "source_url":      { "type": "string", "format": "uri", "nullable": true },
+          "source_verified": { "type": "boolean", "description": "True when the source URL resolved at verification time." }
+        }
+      },
+      "Insight": {
+        "type": "object",
+        "properties": {
+          "insight_type": { "type": "string", "enum": ["industry_impact", "predicted_outcome", "precedent_analysis"] },
+          "content":      { "type": "string" },
+          "citations":    { "type": "array", "items": { "type": "object", "properties": {
+            "kind": { "type": "string", "enum": ["lawsuit", "regulation"] }, "id": { "type": "string", "format": "uuid" }, "name": { "type": "string" }
+          } } },
+          "confidence":   { "type": "number", "format": "float", "nullable": true },
+          "generated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Mention": {
+        "type": "object",
+        "properties": {
+          "url":          { "type": "string", "format": "uri" },
+          "host":         { "type": "string" },
+          "title":        { "type": "string", "nullable": true },
+          "author":       { "type": "string", "nullable": true },
+          "publish_date": { "type": "string", "format": "date", "nullable": true },
+          "excerpt":      { "type": "string", "nullable": true }
+        }
+      },
+
+      "FeedItem": {
+        "type": "object",
+        "properties": {
+          "type":        { "type": "string", "enum": ["lawsuit_event", "regulation_event"] },
+          "event_id":    { "type": "string", "format": "uuid" },
+          "date":        { "type": "string", "format": "date", "nullable": true },
+          "event_type":  { "$ref": "#/components/schemas/EventType" },
+          "title":       { "type": "string", "nullable": true },
+          "description": { "type": "string", "nullable": true },
+          "source_url":  { "type": "string", "format": "uri", "nullable": true },
+          "item_id":     { "type": "string", "format": "uuid", "description": "UUID of the parent lawsuit or regulation." },
+          "item_name":   { "type": "string" },
+          "jurisdiction": { "type": "string" },
+          "item_status": { "type": "string" },
+          "created_at":  { "type": "string", "format": "date-time" }
+        }
+      },
+
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "total":      { "type": "integer" },
+          "page":       { "type": "integer" },
+          "pageSize":   { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      },
+      "PaginatedLawsuits": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Pagination" },
+          { "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/LawsuitListItem" } } } }
+        ]
+      },
+      "PaginatedRegulations": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Pagination" },
+          { "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/RegulationListItem" } } } }
+        ]
+      },
+      "PaginatedUseCases": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Pagination" },
+          { "type": "object", "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/UseCase" } } } }
+        ]
+      },
+
+      "SubmissionInput": {
+        "type": "object",
+        "required": ["kind", "source_url"],
+        "properties": {
+          "kind":          { "type": "string", "enum": ["lawsuit", "regulation", "event"] },
+          "case_name":     { "type": "string", "description": "Required when kind=lawsuit." },
+          "jurisdiction":  { "type": "string" },
+          "parties":       { "type": "string", "description": "Plaintiffs / defendants description." },
+          "source_url":    { "type": "string", "format": "uri" },
+          "summary":       { "type": "string" },
+          "submitter_email": { "type": "string", "format": "email", "nullable": true }
+        }
+      }
+    }
+  }
+}

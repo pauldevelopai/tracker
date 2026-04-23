@@ -813,6 +813,83 @@ export async function runKnowledgeSync() {
   }
 }
 
+// ── AI Legal ingest jobs ──────────────────────────────────────────────────────
+// Thin wrappers so the scheduler's registry can reach them without pulling
+// legal-ingest/* at the top of this file (circular-import safe).
+async function runLegalSourcesIngest() {
+  const { dispatchDueSources } = await import('./legal-ingest/dispatcher.js');
+  const summaries = await dispatchDueSources({ limit: 50 });
+  const itemsProcessed = summaries.reduce((acc, s) => acc + (s.items_new || 0), 0);
+  const ok = summaries.filter(s => s.status === 'success').length;
+  const err = summaries.filter(s => s.status === 'error').length;
+  return {
+    result: `Dispatched ${summaries.length} sources (${ok} ok, ${err} err). New items: ${itemsProcessed}.`,
+    itemsProcessed,
+  };
+}
+
+async function runLegalItemsTriage() {
+  const { triagePendingItems } = await import('./legal-ingest/triage.js');
+  const summary = await triagePendingItems({ limit: 25 });
+  return {
+    result: `Triaged ${summary.seen}: ${summary.promoted} promoted, ${summary.rejected} rejected, ${summary.classified} classified, ${summary.errors.length} errors.`,
+    itemsProcessed: summary.seen,
+  };
+}
+
+async function runLegalDeadLinkCheck() {
+  const { checkDeadLinks } = await import('./legal-ingest/dead-link-checker.js');
+  const s = await checkDeadLinks({ limit: 2000 });
+  const deadTotal = s.lawsuit_events.dead + s.regulation_events.dead + s.source_mentions.dead + s.usecases.dead;
+  const restoredTotal = s.lawsuit_events.restored + s.regulation_events.restored + s.source_mentions.restored + s.usecases.restored;
+  return {
+    result: `Dead-link check: probed ${s.urls_probed} URLs · ${deadTotal} newly dead · ${restoredTotal} restored`,
+    itemsProcessed: s.urls_probed,
+  };
+}
+
+async function runLegalTimelineDeepen() {
+  const { deepenStalestTimelines } = await import('./legal-ingest/timeline-researcher.js');
+  const summary = await deepenStalestTimelines({ limit: 6 });
+  return {
+    result: `Timeline deepen: ${summary.inserted} new events across ${summary.seen} entities, ${summary.errors.length} errors`,
+    itemsProcessed: summary.inserted,
+  };
+}
+
+async function runLegalCourtListenerSync() {
+  const { syncAllUsLawsuits } = await import('./legal-ingest/courtlistener.js');
+  const summary = await syncAllUsLawsuits({ limit: 60 });
+  return {
+    result: `CourtListener: ${summary.synced} synced (${summary.events_inserted} new events), ${summary.needs_review} need review, ${summary.errors} errors`,
+    itemsProcessed: summary.events_inserted,
+  };
+}
+
+async function runLegalArticleScrape() {
+  const { backfillAllMentions } = await import('./legal-ingest/article-scraper.js');
+  const summary = await backfillAllMentions({ limit: 500 });
+  const ok   = summary.lawsuits.ok + summary.regulations.ok;
+  const fail = summary.lawsuits.fail + summary.regulations.fail;
+  return {
+    result: `Article scrape: ${ok} ok, ${fail} failed across ${summary.urls} URLs / ${summary.entities} entities`,
+    itemsProcessed: summary.urls,
+  };
+}
+
+async function runLegalDateAudit() {
+  const { auditAllDates } = await import('./legal-ingest/date-audit.js');
+  const summary = await auditAllDates({ limit: 10 });
+  const changed   = (summary.lawsuits?.changed   || 0) + (summary.regulations?.changed   || 0);
+  const unchanged = (summary.lawsuits?.unchanged || 0) + (summary.regulations?.unchanged || 0);
+  const errors    = (summary.lawsuits?.errors?.length || 0) + (summary.regulations?.errors?.length || 0);
+  const processed = (summary.lawsuits?.processed || 0) + (summary.regulations?.processed || 0);
+  return {
+    result: `Date audit: ${changed} changed, ${unchanged} unchanged, ${errors} errors (${processed} processed)`,
+    itemsProcessed: processed,
+  };
+}
+
 export const JOB_REGISTRY = {
   follow_up_monitor: runFollowUpMonitor,
   content_generator: runContentGenerator,
@@ -826,6 +903,13 @@ export const JOB_REGISTRY = {
   lead_miner: runLeadMiner,
   web_prospector: runWebProspector,
   lawsuit_tracker: runLawsuitTracker,
+  legal_sources_ingest:       runLegalSourcesIngest,
+  legal_items_triage:         runLegalItemsTriage,
+  legal_date_audit:           runLegalDateAudit,
+  legal_article_scrape:       runLegalArticleScrape,
+  legal_courtlistener_sync:   runLegalCourtListenerSync,
+  legal_timeline_deepen:      runLegalTimelineDeepen,
+  legal_dead_link_check:      runLegalDeadLinkCheck,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──
