@@ -45,9 +45,6 @@ ailegal.co.za, www.ailegal.co.za {
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }
-
-    log {
-        output file /var/log/caddy/ailegal.log
-        format json
-    }
+    # Caddy logs to the systemd journal by default (journalctl -u caddy);
+    # don't set a custom file path unless the caddy user owns it.
 }
