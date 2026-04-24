@@ -1,0 +1,53 @@
+# Caddy block for ailegal.co.za. Append to /etc/caddy/Caddyfile (or include
+# via `import /etc/caddy/sites/*.caddy` from the main Caddyfile).
+#
+# Why Caddy instead of nginx on this host: the box already runs Caddy for
+# its existing app on port 80 (reverse_proxy localhost:8000). Rather than
+# fight for the port, we add a hostname block — Caddy auto-provisions
+# Let's Encrypt certs for ailegal.co.za as soon as DNS resolves here.
+
+ailegal.co.za, www.ailegal.co.za {
+    encode gzip zstd
+
+    root * /home/ubuntu/holly/client/dist
+
+    # ── Public API + versioned API → Node ─────────────────────────────────
+    @api path /api/public/* /api/v1/* /api/v1
+    reverse_proxy @api localhost:3001
+
+    # ── Detail pages with UUIDs → Node (for server-rendered OG tags) ──────
+    @detailPages path_regexp ^/(lawsuits|regulations|usecases)/[0-9a-f-]{36}/?$
+    reverse_proxy @detailPages localhost:3001
+
+    # ── Dynamic sitemap → Node ────────────────────────────────────────────
+    @sitemap path /sitemap.xml
+    reverse_proxy @sitemap localhost:3001
+
+    # ── Hashed Vite bundles → serve static + cache for a year ─────────────
+    @hashed path /assets/*
+    handle @hashed {
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
+
+    # ── Bare root → send visitors to the public home, not admin login ─────
+    @root path /
+    redir @root /legal 302
+
+    # ── Everything else: static first, fall through to the SPA shell ──────
+    try_files {path} /index.html
+    file_server
+
+    # Headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/ailegal.log
+        format json
+    }
+}

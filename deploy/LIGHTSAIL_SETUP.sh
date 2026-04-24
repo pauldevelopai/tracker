@@ -164,28 +164,27 @@ if ! curl -sSf http://127.0.0.1:3001/api/public/lawsuits >/dev/null 2>&1; then
   warn "API on 127.0.0.1:3001 isn't responding yet. Check: pm2 logs holly-server"
 fi
 
-# ── 7. Nginx ─────────────────────────────────────────────────────────────────
-log "Installing nginx server block…"
-sudo cp "$APP_DIR/deploy/nginx/ailegal.co.za.conf" "/etc/nginx/sites-available/ailegal.co.za"
-sudo ln -sf "/etc/nginx/sites-available/ailegal.co.za" "/etc/nginx/sites-enabled/ailegal.co.za"
-# Disable the default welcome site if present — it competes for port 80.
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-log "Nginx reloaded (HTTP only — HTTPS comes after DNS propagates + certbot)."
+# ── 7. Caddy (reverse proxy + auto-HTTPS) ────────────────────────────────────
+# The host already runs Caddy for other apps. We append our hostname block
+# to the main Caddyfile via an import, then reload — Caddy auto-provisions
+# Let's Encrypt certs for ailegal.co.za once DNS resolves here.
+log "Installing Caddy site block…"
+sudo mkdir -p /etc/caddy/sites
+sudo cp "$APP_DIR/deploy/caddy/ailegal.co.za.caddy" /etc/caddy/sites/ailegal.co.za.caddy
 
-# ── 8. Certbot (only if DNS already points here) ─────────────────────────────
-ACTUAL_IP=$(dig +short "$DOMAIN" | tail -n 1)
-if [[ "$ACTUAL_IP" == "$EXPECTED_IP" ]]; then
-  log "DNS resolves correctly → running certbot…"
-  sudo certbot --nginx --non-interactive --agree-tos \
-    -m paul@developai.co.za \
-    -d "$DOMAIN" -d "$WWW_DOMAIN" --redirect || warn "certbot failed — see /var/log/letsencrypt/"
-else
-  warn "DNS for $DOMAIN resolves to '$ACTUAL_IP' (expected $EXPECTED_IP)."
-  warn "Once GoDaddy has propagated (check with: dig +short $DOMAIN), run:"
-  warn "  sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN --redirect"
+# Ensure the main Caddyfile imports /etc/caddy/sites/*.caddy (idempotent).
+if ! sudo grep -q "import /etc/caddy/sites/\*\.caddy" /etc/caddy/Caddyfile; then
+  echo "" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+  echo "import /etc/caddy/sites/*.caddy" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
 fi
 
-log "Done. Visit: http://$DOMAIN  (or https:// after certbot)"
-log "Health check: curl http://$DOMAIN/api/public/lawsuits | head -c 200"
+# Validate + reload. Caddy will start auto-provisioning TLS for the new host.
+if sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile; then
+  sudo systemctl reload caddy
+  log "Caddy reloaded — HTTPS will auto-provision when DNS points at this box."
+else
+  fatal "Caddy config invalid — check /etc/caddy/Caddyfile"
+fi
+
+log "Done. Visit: https://$DOMAIN  (Caddy provisions certs on first request)"
+log "Health check: curl -sS https://$DOMAIN/api/public/lawsuits | head -c 200"
