@@ -5,46 +5,60 @@
 # its existing app on port 80 (reverse_proxy localhost:8000). Rather than
 # fight for the port, we add a hostname block — Caddy auto-provisions
 # Let's Encrypt certs for ailegal.co.za as soon as DNS resolves here.
+#
+# Why explicit `handle` blocks: directive ordering matters and our SPA
+# fallback (try_files → /index.html, file_server) would otherwise rewrite
+# /api/public/* + /sitemap.xml etc. to /index.html before any reverse_proxy
+# fired. Each handle is mutually exclusive — first-match wins.
 
 ailegal.co.za, www.ailegal.co.za {
     encode gzip zstd
-
     root * /home/ubuntu/holly/client/dist
 
-    # ── Public API + versioned API → Node ─────────────────────────────────
-    @api path /api/public/* /api/v1/* /api/v1
-    reverse_proxy @api localhost:3001
+    # ── Public API + versioned API → Node ────────────────────────────────
+    handle /api/public/* {
+        reverse_proxy localhost:3001
+    }
+    handle /api/v1/* {
+        reverse_proxy localhost:3001
+    }
+    handle /api/v1 {
+        reverse_proxy localhost:3001
+    }
 
-    # ── Detail pages with UUIDs → Node (for server-rendered OG tags) ──────
+    # ── Detail pages with UUIDs → Node (for server-rendered OG tags) ─────
     @detailPages path_regexp ^/(lawsuits|regulations|usecases)/[0-9a-f-]{36}/?$
-    reverse_proxy @detailPages localhost:3001
+    handle @detailPages {
+        reverse_proxy localhost:3001
+    }
 
-    # ── Dynamic sitemap → Node ────────────────────────────────────────────
-    @sitemap path /sitemap.xml
-    reverse_proxy @sitemap localhost:3001
+    # ── Dynamic sitemap → Node ───────────────────────────────────────────
+    handle /sitemap.xml {
+        reverse_proxy localhost:3001
+    }
 
-    # ── Hashed Vite bundles → serve static + cache for a year ─────────────
-    @hashed path /assets/*
-    handle @hashed {
+    # ── Hashed Vite bundles → static + year-long immutable cache ─────────
+    handle /assets/* {
         header Cache-Control "public, max-age=31536000, immutable"
         file_server
     }
 
-    # ── Bare root → send visitors to the public home, not admin login ─────
-    @root path /
-    redir @root /legal 302
+    # ── Bare root → public home, not admin login ─────────────────────────
+    handle / {
+        redir /legal 302
+    }
 
-    # ── Everything else: static first, fall through to the SPA shell ──────
-    try_files {path} /index.html
-    file_server
+    # ── Everything else: static file, fall through to SPA shell ──────────
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
 
-    # Headers
     header {
         X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
         -Server
     }
-    # Caddy logs to the systemd journal by default (journalctl -u caddy);
-    # don't set a custom file path unless the caddy user owns it.
+    # Caddy logs to the systemd journal by default (journalctl -u caddy).
 }

@@ -164,6 +164,12 @@ if ! curl -sSf http://127.0.0.1:3001/api/public/lawsuits >/dev/null 2>&1; then
   warn "API on 127.0.0.1:3001 isn't responding yet. Check: pm2 logs holly-server"
 fi
 
+# ── 6.5 Make /home/ubuntu traversable by Caddy ───────────────────────────────
+# Lightsail's default /home/ubuntu is 750, which blocks the caddy user from
+# reaching the SPA static files. +x on "other" lets Caddy traverse into
+# specific subpaths it knows; it can't list the home directory contents.
+sudo chmod o+x /home/ubuntu
+
 # ── 7. Caddy (reverse proxy + auto-HTTPS) ────────────────────────────────────
 # The host already runs Caddy for other apps. We append our hostname block
 # to the main Caddyfile via an import, then reload — Caddy auto-provisions
