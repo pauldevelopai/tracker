@@ -50,7 +50,14 @@ ailegal.co.za, www.ailegal.co.za {
     redir @root /legal 302
 
     # ── Everything else: static file, fall through to SPA shell ──────────
+    # The SPA shell (index.html) must NEVER be cached — it references the
+    # hashed asset bundles (those ARE cacheable) and a stale shell would
+    # point browsers at a deleted bundle file. Vite's hashed /assets/* are
+    # already cached for a year by the dedicated handler above.
     handle {
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        header Pragma "no-cache"
+        header Expires "0"
         try_files {path} /index.html
         file_server
     }
