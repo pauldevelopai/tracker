@@ -44,9 +44,10 @@ ailegal.co.za, www.ailegal.co.za {
     }
 
     # ── Bare root → public home, not admin login ─────────────────────────
-    handle / {
-        redir /legal 302
-    }
+    # (Outside `handle` because `redir <to> <code>` inside handle / was
+    # parsed by Caddy as `redir <matcher> <to>`, never firing.)
+    @root path /
+    redir @root /legal 302
 
     # ── Everything else: static file, fall through to SPA shell ──────────
     handle {
