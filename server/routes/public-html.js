@@ -28,7 +28,10 @@ try {
   console.warn('[public-html] client/dist/index.html not found — run `npm run build` in client/ for production. Dev is unaffected.');
 }
 
-const OG_BLOCK_RE = /<!-- og-begin -->[\s\S]*?<!-- og-end -->/;
+// Tolerates extra text in the comment (eg. `<!-- og-begin (annotation) -->`)
+// and arbitrary whitespace, so cosmetic edits to index.html don't break the
+// replacement and silently fall back to the (broken) "append" path.
+const OG_BLOCK_RE = /<!--\s*og-begin\b[\s\S]*?<!--\s*og-end\b[^>]*-->/;
 
 // SVG is supported by Slack, Discord, Telegram, Twitter (2023+), modern
 // WhatsApp. Facebook + LinkedIn still prefer PNG — swap this to a PNG when
