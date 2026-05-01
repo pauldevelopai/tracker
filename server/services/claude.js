@@ -7,14 +7,17 @@ const MODEL_CHEAP = 'claude-sonnet-4-6';
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
 // ── Classifier backend dispatch ─────────────────────────────────────────────
-// LLM_BACKEND=ollama  → local Gemma via Ollama (free, default)
-// LLM_BACKEND=anthropic → Claude Sonnet with prompt caching (paid)
+// LLM_BACKEND=ollama    → local Gemma via Ollama (free, requires local model)
+// LLM_BACKEND=anthropic → Claude Sonnet with prompt caching (paid, ~$42/mo @ 100 items/day)
+// LLM_BACKEND=groq      → openai/gpt-oss-120b on Groq (paid, ~$6/mo @ 100 items/day)
 //
-// Lightsail prod will set LLM_BACKEND=ollama + OLLAMA_URL=<tailscale IP of Mac>
-// so the abstraction is the same; only the env differs.
+// Production currently runs LLM_BACKEND=groq — same Apache-2.0 OpenAI open-weight
+// model, hosted (Lightsail can't run it locally), an order of magnitude cheaper.
 const LLM_BACKEND  = process.env.LLM_BACKEND  || 'ollama';
 const OLLAMA_URL   = process.env.OLLAMA_URL   || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'gemma3:12b';
+const GROQ_API_URL = process.env.GROQ_API_URL || 'https://api.groq.com/openai/v1';
+const GROQ_MODEL   = process.env.GROQ_MODEL   || 'openai/gpt-oss-120b';
 
 async function callOllamaClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
@@ -57,15 +60,47 @@ async function callAnthropicClassifier({ cachedSystem, userContent, maxTokens, t
   return message.content[0].text;
 }
 
+async function callGroqClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+
+  const res = await fetch(`${GROQ_API_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: [
+        { role: 'system', content: cachedSystem },
+        { role: 'user',   content: userContent },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+      // JSON mode: forces strict JSON output, no markdown fences. Same guarantee
+      // as Ollama's format:'json'. The triage prompt asks for a specific shape
+      // and the parser downstream is unforgiving of preamble text.
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Groq ${res.status}: ${body.slice(0, 400)}`);
+  }
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
 /**
  * Classifier call — backend-agnostic. Returns just the text. Errors bubble up.
  *
- * When LLM_BACKEND=ollama (default), runs locally against Gemma 3 via Ollama.
- * When LLM_BACKEND=anthropic, uses Claude Sonnet with ephemeral prompt caching.
+ * Backends: ollama (local), anthropic (Claude Sonnet), groq (gpt-oss-120b).
  */
 export async function callClaudeClassifier({ cachedSystem, userContent, maxTokens = 600, temperature = 0.1 }) {
   const args = { cachedSystem, userContent, maxTokens, temperature };
   if (LLM_BACKEND === 'anthropic') return callAnthropicClassifier(args);
+  if (LLM_BACKEND === 'groq')      return callGroqClassifier(args);
   return callOllamaClassifier(args);
 }
 
