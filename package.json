@@ -9,7 +9,8 @@
     "migrate": "cd server && node db/migrate.js",
     "seed": "cd server && node db/seed.js",
     "build": "cd client && npm run build",
-    "orchestrate": "cd server && node db/scripts/orchestrate.js"
+    "orchestrate": "cd server && node db/scripts/orchestrate.js",
+    "scrape": "cd server && node db/scripts/scrape-only.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
