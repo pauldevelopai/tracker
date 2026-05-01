@@ -60,9 +60,20 @@ async function callAnthropicClassifier({ cachedSystem, userContent, maxTokens, t
   return message.content[0].text;
 }
 
+// Process-global throttle: Groq free tier caps at 8K tokens/minute. Each
+// triage call is ~3K tokens (slim catalogue + 1500-char content cap), so
+// roughly 2.5 calls/min fits the cap. Default 25s spacing leaves headroom;
+// tune via GROQ_MIN_INTERVAL_MS if you switch to a paid tier.
+let lastGroqCallAt = 0;
+const GROQ_MIN_INTERVAL_MS = parseInt(process.env.GROQ_MIN_INTERVAL_MS || '25000', 10);
+
 async function callGroqClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY not configured');
+
+  const wait = lastGroqCallAt + GROQ_MIN_INTERVAL_MS - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastGroqCallAt = Date.now();
 
   const res = await fetch(`${GROQ_API_URL}/chat/completions`, {
     method: 'POST',

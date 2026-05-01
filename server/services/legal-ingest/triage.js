@@ -42,16 +42,20 @@ async function loadEntityCatalogue() {
 }
 
 function catalogueToPromptBlock({ lawsuits, regulations }) {
+  // Slim format keeps the prompt under Groq's free-tier 8K TPM cap. Earlier
+  // version included jurisdiction + defendants; trimming roughly halves the
+  // catalogue token cost. Worst case the model can't disambiguate a few
+  // similarly-named cases — those drop to "candidate" for human review.
   const lines = [];
-  lines.push('## Known lawsuits (id · case_name · jurisdiction · defendants)');
+  lines.push('## Known lawsuits (id · case_name)');
   for (const l of lawsuits) {
-    lines.push(`- ${l.id} · ${l.case_name} · ${l.jurisdiction} · ${l.defendants_str || '—'}`);
+    lines.push(`- ${l.id} · ${l.case_name}`);
   }
   lines.push('');
-  lines.push('## Known regulations (id · short_name — regulation_name · jurisdiction)');
+  lines.push('## Known regulations (id · name)');
   for (const r of regulations) {
     const label = r.short_name ? `${r.short_name} — ${r.regulation_name}` : r.regulation_name;
-    lines.push(`- ${r.id} · ${label} · ${r.jurisdiction}`);
+    lines.push(`- ${r.id} · ${label}`);
   }
   return lines.join('\n');
 }
@@ -60,7 +64,7 @@ function catalogueToPromptBlock({ lawsuits, regulations }) {
 // The system block is constructed so the large, reusable part (instructions +
 // entity catalogue) is cached. userContent holds only the per-item data.
 function buildTriagePrompt(item, catalogueBlock) {
-  const content = (item.content || '').slice(0, 3000);
+  const content = (item.content || '').slice(0, 1500);
   return {
     system: `You are a precise legal-news triage agent for an AI-legal tracker.
 
@@ -362,6 +366,11 @@ async function applyTriageResult(item, result) {
 // batchSize = 1 → original per-item path (useful for debugging a specific item).
 // batchSize = 5 → default; cheapest + fastest for noise-heavy feeds.
 export async function triagePendingItems({ limit = 20, batchSize = 5 } = {}) {
+  // Groq free tier has an 8K TPM cap that a 5-item batch trips reliably.
+  // Force single-item mode there; client-side throttling in callGroqClassifier
+  // keeps the per-minute budget under the cap.
+  if (process.env.LLM_BACKEND === 'groq') batchSize = 1;
+
   const catalogue = await loadEntityCatalogue();
   const catalogueBlock = catalogueToPromptBlock(catalogue);
 
