@@ -37,7 +37,7 @@ async function main() {
   log(`sources_dispatched=${summaries.length} ok=${ok} err=${errored} items_seen=${seen} items_new=${itemsNew}`);
 
   for (const s of summaries) {
-    log(`  ${s.status === 'success' ? '✓' : '✗'} ${s.source_name || s.source_id}: seen=${s.items_seen || 0} new=${s.items_new || 0}${s.error ? ` err=${s.error}` : ''}`);
+    log(`  ${s.status === 'success' ? '✓' : '✗'} ${s.source || '(unnamed)'}: seen=${s.items_seen || 0} new=${s.items_new || 0}${s.error ? ` err=${s.error}` : ''}`);
   }
 
   log(`scrape-only: done (log: ${logPath})`);
