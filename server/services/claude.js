@@ -60,12 +60,16 @@ async function callAnthropicClassifier({ cachedSystem, userContent, maxTokens, t
   return message.content[0].text;
 }
 
-// Process-global throttle: Groq free tier caps at 8K tokens/minute. Each
-// triage call is ~3K tokens (slim catalogue + 1500-char content cap), so
-// roughly 2.5 calls/min fits the cap. Default 25s spacing leaves headroom;
-// tune via GROQ_MIN_INTERVAL_MS if you switch to a paid tier.
+// Process-global throttle: Groq free tier caps at 8K tokens/minute (sliding
+// token bucket). Each triage call is ~4-5K tokens including the reserved
+// max_tokens budget — Groq counts that against TPM even if unused. So 45s
+// spacing keeps sustained rate ≈ 4500 × (60/45) = 6K TPM, comfortably under.
+// Tune via GROQ_MIN_INTERVAL_MS=NN if you upgrade to Dev Tier (250K TPM).
 let lastGroqCallAt = 0;
-const GROQ_MIN_INTERVAL_MS = parseInt(process.env.GROQ_MIN_INTERVAL_MS || '25000', 10);
+const GROQ_MIN_INTERVAL_MS = parseInt(process.env.GROQ_MIN_INTERVAL_MS || '45000', 10);
+// Cap output budget for triage. Output JSON rarely exceeds 400 tokens; capping
+// shaves the reserved-but-unused tokens that count against TPM.
+const GROQ_MAX_OUTPUT_TOKENS = parseInt(process.env.GROQ_MAX_OUTPUT_TOKENS || '500', 10);
 
 async function callGroqClassifier({ cachedSystem, userContent, maxTokens, temperature }) {
   const apiKey = process.env.GROQ_API_KEY;
@@ -88,7 +92,7 @@ async function callGroqClassifier({ cachedSystem, userContent, maxTokens, temper
         { role: 'user',   content: userContent },
       ],
       temperature,
-      max_tokens: maxTokens,
+      max_tokens: Math.min(maxTokens, GROQ_MAX_OUTPUT_TOKENS),
       // JSON mode: forces strict JSON output, no markdown fences. Same guarantee
       // as Ollama's format:'json'. The triage prompt asks for a specific shape
       // and the parser downstream is unforgiving of preamble text.
