@@ -348,7 +348,9 @@ function CaseCard({ case_: c, selected, events, onSelect, cardRef, hideExpandHin
 
         <div style={{ textAlign: 'right', flexShrink: 0, fontSize: 11, color: 'var(--text-secondary)' }}>
           {c.filing_date && <div>Filed {formatDate(c.filing_date)}</div>}
-          {c.last_update && <div style={{ marginTop: 2 }}>Updated {timeAgo(c.last_update)}</div>}
+          {(c.latest_event_date || c.last_update) && (
+            <div style={{ marginTop: 2 }}>Updated {timeAgo(c.latest_event_date || c.last_update)}</div>
+          )}
           {c.judge && <div style={{ marginTop: 2 }}>Judge {c.judge}</div>}
           {c.settlement_amount && <div style={{ marginTop: 2, color: '#065F46', fontWeight: 600 }}>{c.settlement_amount}</div>}
           {!hideExpandHint && (
