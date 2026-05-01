@@ -18,7 +18,7 @@ const navStyle = ({ isActive }) => ({
 export default function PublicLayout() {
   useEffect(() => {
     const prev = document.title;
-    document.title = 'AI Legal — Global AI Lawsuits & Regulations Tracker';
+    document.title = 'Grounded: AI Legal — Global AI Lawsuits & Regulations Tracker';
     return () => { document.title = prev; };
   }, []);
 
@@ -70,7 +70,7 @@ export default function PublicLayout() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
           fontSize: 12, color: 'var(--text-secondary)',
         }}>
-          <span>© AI Legal · <a href="https://ailegal.co.za" style={{ color: 'var(--text-secondary)' }}>ailegal.co.za</a></span>
+          <span>© Grounded · <a href="https://grounded.developai.co.za" style={{ color: 'var(--text-secondary)' }}>grounded.developai.co.za</a></span>
           <span>Tracking global AI lawsuits and regulations</span>
         </div>
       </footer>
