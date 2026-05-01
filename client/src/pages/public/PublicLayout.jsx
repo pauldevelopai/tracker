@@ -37,7 +37,7 @@ export default function PublicLayout() {
         }}>
           <Link to="/legal" style={{ textDecoration: 'none', color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>AI&nbsp;Legal</span>
+              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>Grounded: AI&nbsp;Legal</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
                 Global AI lawsuits &amp; regulations tracker
               </span>
