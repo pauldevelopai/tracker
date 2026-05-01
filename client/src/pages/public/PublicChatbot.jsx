@@ -81,7 +81,7 @@ export default function PublicChatbot() {
     return (
       <button
         onClick={() => setOpen(true)}
-        aria-label="Open AI Legal assistant"
+        aria-label="Open Grounded: AI Legal assistant"
         style={{
           position: 'fixed', right: 20, bottom: 20, zIndex: 100,
           width: 56, height: 56, borderRadius: '50%',
@@ -112,7 +112,7 @@ export default function PublicChatbot() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
       }}>
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>AI Legal assistant</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>Grounded: AI Legal assistant</span>
           <span style={{ fontSize: 10, color: '#94A3B8' }}>Powered by Claude · scoped to AI law</span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>

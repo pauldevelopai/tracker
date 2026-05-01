@@ -56,7 +56,7 @@ function truncate(s, n) {
 
 function originOf(req) {
   const proto = req.get('X-Forwarded-Proto') || req.protocol || 'https';
-  const host  = req.get('X-Forwarded-Host')  || req.get('Host') || 'ailegal.co.za';
+  const host  = req.get('X-Forwarded-Host')  || req.get('Host') || 'grounded.developai.co.za';
   return `${proto}://${host}`;
 }
 
@@ -67,7 +67,7 @@ function renderOgBlock({ title, description, url, image, type = 'article' }) {
   const i = escapeHtml(image);
   return `<!-- og-begin -->
     <meta name="description" content="${d}" />
-    <meta property="og:site_name" content="AI Legal" />
+    <meta property="og:site_name" content="Grounded: AI Legal" />
     <meta property="og:type" content="${type}" />
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
@@ -115,7 +115,7 @@ router.get('/lawsuits/:id', async (req, res, next) => {
     const l = rows[0];
     const origin = originOf(req);
     serveHtml(res, {
-      title:       `${l.case_name} — AI Legal`,
+      title:       `${l.case_name} — Grounded: AI Legal`,
       description: truncate(l.summary || `${l.case_name} · ${l.jurisdiction || 'Jurisdiction unknown'} · ${l.case_type || 'AI lawsuit'}.`, 300),
       url:         `${origin}/lawsuits/${l.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
@@ -139,7 +139,7 @@ router.get('/regulations/:id', async (req, res, next) => {
     const label = r.short_name ? `${r.short_name} — ${r.regulation_name}` : r.regulation_name;
     const origin = originOf(req);
     serveHtml(res, {
-      title:       `${label} — AI Legal`,
+      title:       `${label} — Grounded: AI Legal`,
       description: truncate(r.summary || `${label} · ${r.jurisdiction || 'Jurisdiction unknown'} · ${r.regulation_type || 'AI regulation'}.`, 300),
       url:         `${origin}/regulations/${r.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
@@ -162,7 +162,7 @@ router.get('/usecases/:id', async (req, res, next) => {
     const u = rows[0];
     const origin = originOf(req);
     serveHtml(res, {
-      title:       `${u.firm_name}: ${u.use_case_title} — AI Legal`,
+      title:       `${u.firm_name}: ${u.use_case_title} — Grounded: AI Legal`,
       description: truncate(u.summary || `How ${u.firm_name} is using AI. ${u.jurisdiction || ''}`, 300),
       url:         `${origin}/usecases/${u.id}`,
       image:       `${origin}${DEFAULT_IMAGE}`,
