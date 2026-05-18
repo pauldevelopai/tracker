@@ -74,6 +74,7 @@ const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
 const PublicSubmit   = lazy(() => import('./pages/public/PublicSubmit.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
+const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
 function LazyFallback() {
   return (
@@ -104,6 +105,8 @@ export default function App() {
             <Route path="submit"         element={<Suspense fallback={<LazyFallback />}><PublicSubmit /></Suspense>} />
             <Route path="use-cases"      element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="list" /></Suspense>} />
             <Route path="use-cases/:id"  element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="detail" /></Suspense>} />
+            <Route path="tools"          element={<Suspense fallback={<LazyFallback />}><PublicTools mode="list" /></Suspense>} />
+            <Route path="tools/:slug"    element={<Suspense fallback={<LazyFallback />}><PublicTools mode="detail" /></Suspense>} />
             {/* Old path, now rolled into /legal/sources */}
             <Route path="transparency" element={<Navigate to="/legal/sources" replace />} />
           </Route>

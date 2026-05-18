@@ -49,6 +49,7 @@ export default function PublicLayout() {
             <NavLink to="/legal/regulations" style={navStyle}>Regulations</NavLink>
             <NavLink to="/legal/explore" style={navStyle}>Connections</NavLink>
             <NavLink to="/legal/use-cases" style={navStyle}>Use cases</NavLink>
+            <NavLink to="/legal/tools" style={navStyle}>Tools</NavLink>
             <NavLink to="/legal/sources" style={navStyle}>Sources</NavLink>
             <NavLink to="/legal/submit" style={navStyle}>Submit</NavLink>
           </nav>

@@ -1084,4 +1084,59 @@ ${entries}
   }
 });
 
+// ── AI Toolkit (imported from aikit) ─────────────────────────────────────────
+router.get('/toolkit', async (req, res) => {
+  try {
+    const { category, q } = req.query;
+    const filters = [];
+    const params = [];
+    if (category && category !== 'all') {
+      params.push(category);
+      filters.push(`primary_category = $${params.length}`);
+    }
+    if (q) {
+      params.push(`%${q}%`);
+      filters.push(`(name ILIKE $${params.length} OR description ILIKE $${params.length} OR primary_category ILIKE $${params.length})`);
+    }
+    const whereSql = filters.length ? 'WHERE ' + filters.join(' AND ') : '';
+
+    const { rows } = await pool.query(
+      `SELECT slug, name, url, primary_category, categories, description,
+              cdi_cost, cdi_difficulty, cdi_invasiveness
+         FROM tools ${whereSql}
+        ORDER BY primary_category ASC NULLS LAST, name ASC`,
+      params
+    );
+
+    const categoriesAgg = await pool.query(
+      `SELECT primary_category AS name, COUNT(*)::int AS count
+         FROM tools
+        WHERE primary_category IS NOT NULL
+        GROUP BY primary_category
+        ORDER BY primary_category`
+    );
+
+    res.json({ items: rows, categories: categoriesAgg.rows });
+  } catch (err) {
+    console.error('[public/toolkit]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+router.get('/toolkit/:slug', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, name, url, primary_category, categories, description, purpose,
+              cdi_cost, cdi_difficulty, cdi_invasiveness, updated_at
+         FROM tools WHERE slug = $1`,
+      [req.params.slug]
+    );
+    if (rows.length === 0) return res.status(404).json({ message: 'Not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('[public/toolkit/:slug]', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 export default router;
