@@ -98,8 +98,13 @@ function rewriteAikitHtml(html) {
       if (path === '/register' || path.startsWith('/register?')) {
         return `${attr}="/login?next=/tools/"`;
       }
-      // Already a tools-scoped path — leave alone.
-      if (path.startsWith('/tools')) return match;
+      // Exactly "/tools/" — that's the Grounded header's section-home
+      // link (I added it; it's already prefix-correct). Leave alone.
+      // All OTHER /tools and /tools/<x> paths are AIKit's INTERNAL
+      // routes (its own /tools catalogue + /tools/<slug> detail pages)
+      // and must be double-prefixed so the browser routes back through
+      // this proxy.
+      if (path === '/tools/') return match;
       // Bare "/" is tracker's public home — leave alone.
       if (path === '/' || path.startsWith('/?')) return match;
       // Tracker-owned path (Grounded header nav, /api/*, static assets,
@@ -127,7 +132,10 @@ app.use('/tools', createProxyMiddleware({
         if (loc === '/login' || loc.startsWith('/login?') ||
             loc === '/register' || loc.startsWith('/register?')) {
           proxyRes.headers['location'] = '/login?next=/tools/';
-        } else if (!loc.startsWith('/tools') && !TRACKER_PATH_RE.test(loc)) {
+        } else if (loc !== '/tools/' && !TRACKER_PATH_RE.test(loc)) {
+          // Always prefix unless it's the literal section-home /tools/ or
+          // a tracker-owned path. AIKit's own /tools and /tools/<slug>
+          // redirects need the prefix doubled too.
           proxyRes.headers['location'] = '/tools' + loc;
         }
       }
