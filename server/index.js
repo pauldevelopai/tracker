@@ -120,7 +120,10 @@ function rewriteAikitHtml(html) {
 app.use('/tools', createProxyMiddleware({
   target: 'http://127.0.0.1:8000',
   changeOrigin: true,
-  pathRewrite: { '^/tools': '' },
+  // Note: NO pathRewrite. Express's app.use('/tools', ...) already
+  // strips the /tools prefix before the middleware sees the request,
+  // so a pathRewrite '^/tools' would strip a second time and break
+  // AIKit's own /tools/* routes (catalogue + tool detail pages).
   ws: false,
   selfHandleResponse: true,
   on: {
