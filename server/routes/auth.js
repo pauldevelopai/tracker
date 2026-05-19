@@ -112,12 +112,12 @@ router.post('/logout', async (req, res) => {
   await bridgeAikitLogout(req, res);
 
   // AIKit's HTML logout form submits with Accept: text/html and expects a
-  // redirect, not JSON. Detect that and bounce to /legal so the user lands
-  // somewhere coherent. Programmatic JSON callers (Accept: application/json)
-  // still get the {ok:true} response.
+  // redirect, not JSON. Detect that and bounce to the public home so the
+  // user lands somewhere coherent. Programmatic JSON callers (Accept:
+  // application/json) still get the {ok:true} response.
   const accept = req.headers.accept || '';
   if (accept.includes('text/html') && !accept.includes('application/json')) {
-    return res.redirect(303, '/legal');
+    return res.redirect(303, '/');
   }
   res.json({ ok: true });
 });

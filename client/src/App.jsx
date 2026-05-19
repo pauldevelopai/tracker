@@ -93,7 +93,14 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/portal" element={<ParticipantPortal />} />
 
-          {/* ── Public AI Legal site (ailegal.co.za) — no auth required ── */}
+          {/* ── Public site root (/) renders PublicHome with PublicLayout.
+              Sub-pages live under /legal/* to avoid colliding with admin
+              routes (/lawsuits, /regulations, /sources, etc.). */}
+          <Route path="/" element={<PublicLayout />}>
+            <Route index element={<PublicHome />} />
+          </Route>
+
+          {/* ── Public AI Legal site (sub-pages) — no auth required ── */}
           <Route path="/legal" element={<PublicLayout />}>
             <Route index element={<PublicHome />} />
             <Route path="lawsuits" element={<PublicLawsuitsList />} />
@@ -122,7 +129,7 @@ export default function App() {
 
               {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
               <Route element={<AdminRoute />}>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/contacts" element={<ContactsList />} />
                 <Route path="/contacts/:id" element={<ContactDetail />} />
                 <Route path="/organisations" element={<OrganisationsList />} />

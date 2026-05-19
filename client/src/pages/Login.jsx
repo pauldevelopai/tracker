@@ -49,7 +49,7 @@ export default function Login() {
           // reloads against the new session cookies.
           window.location.href = next;
         } else {
-          navigate(user.role === 'admin' ? '/' : '/lawsuits');
+          navigate(user.role === 'admin' ? '/dashboard' : '/lawsuits');
         }
       } else {
         await register(name.trim(), email, password);

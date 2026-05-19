@@ -98,6 +98,8 @@ function rewriteAikitHtml(html) {
       }
       // Already an AIKit-scoped path — leave alone.
       if (path.startsWith('/aikit')) return match;
+      // Bare "/" is tracker's public home — leave alone.
+      if (path === '/' || path.startsWith('/?')) return match;
       // Tracker-owned path (Grounded header nav, /api/*, static assets,
       // admin routes) — also leave alone so the browser hits tracker.
       if (TRACKER_PATH_RE.test(path)) return match;

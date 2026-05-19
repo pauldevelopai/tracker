@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 // Lazy so the chatbot bundle doesn't block first paint — it's only used
 // once a visitor clicks the 💬 button.
@@ -15,12 +16,20 @@ const navStyle = ({ isActive }) => ({
   textDecoration: 'none',
 });
 
+const inactiveStyle = navStyle({ isActive: false });
+
 export default function PublicLayout() {
+  const { user, logout } = useAuth();
+  const location = useLocation();
   useEffect(() => {
     const prev = document.title;
     document.title = 'Grounded: AI Legal — Global AI Lawsuits & Regulations Tracker';
     return () => { document.title = prev; };
   }, []);
+
+  // Where to bring the user back to after a successful sign-in.
+  const nextParam = encodeURIComponent(location.pathname + location.search);
+  const firstName = user?.name?.split(' ')[0] || user?.email || 'admin';
 
   return (
     <div style={{
@@ -35,7 +44,7 @@ export default function PublicLayout() {
           maxWidth: 1200, margin: '0 auto', padding: '14px 24px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
         }}>
-          <Link to="/legal" style={{ textDecoration: 'none', color: 'var(--text-primary)' }}>
+          <Link to="/" style={{ textDecoration: 'none', color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
               <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>Grounded: AI&nbsp;Legal</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
@@ -43,15 +52,28 @@ export default function PublicLayout() {
               </span>
             </div>
           </Link>
-          <nav style={{ display: 'flex', gap: 4 }}>
-            <NavLink to="/legal" end style={navStyle}>Home</NavLink>
+          <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavLink to="/legal/lawsuits" style={navStyle}>Lawsuits</NavLink>
             <NavLink to="/legal/regulations" style={navStyle}>Regulations</NavLink>
             <NavLink to="/legal/explore" style={navStyle}>Connections</NavLink>
             <NavLink to="/legal/use-cases" style={navStyle}>Use cases</NavLink>
-            <a href="/aikit/" style={navStyle({ isActive: false })}>Tools</a>
+            <a href="/aikit/" style={inactiveStyle}>Tools</a>
             <NavLink to="/legal/sources" style={navStyle}>Sources</NavLink>
             <NavLink to="/legal/submit" style={navStyle}>Submit</NavLink>
+            {user ? (
+              <>
+                <span style={{ ...inactiveStyle, color: 'var(--text-primary)', fontWeight: 600 }}>Hi, {firstName}</span>
+                <button onClick={async () => { await logout(); window.location.reload(); }}
+                        style={{ ...inactiveStyle, background: 'transparent', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <a href={`/login?next=${nextParam}`} style={{ ...inactiveStyle, border: '1px solid var(--border-color)' }}>
+                Sign&nbsp;in&nbsp;/&nbsp;Register
+              </a>
+            )}
           </nav>
         </div>
       </header>
