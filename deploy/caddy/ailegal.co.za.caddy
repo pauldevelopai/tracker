@@ -37,6 +37,14 @@ ailegal.co.za, www.ailegal.co.za, grounded.developai.co.za {
         reverse_proxy localhost:3001
     }
 
+    # ── /aikit/* → Node (Node proxies to FastAPI on :8000 with HTML rewrite) ─
+    handle /aikit/* {
+        reverse_proxy localhost:3001
+    }
+    handle /aikit {
+        redir /aikit/ 301
+    }
+
     # ── Hashed Vite bundles → static + year-long immutable cache ─────────
     handle /assets/* {
         header Cache-Control "public, max-age=31536000, immutable"

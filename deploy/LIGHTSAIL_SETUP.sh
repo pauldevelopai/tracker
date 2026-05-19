@@ -175,6 +175,64 @@ if ! curl -sSf http://127.0.0.1:3001/api/public/lawsuits >/dev/null 2>&1; then
   warn "API on 127.0.0.1:3001 isn't responding yet. Check: pm2 logs tracker-server"
 fi
 
+# ── 6.b AIKit (Tool Tracker) FastAPI ─────────────────────────────────────────
+# AIKit is a separate FastAPI app (github.com/pauldevelopai/aikit) proxied
+# at /aikit/* by tracker's Node server. Runs as its own pm2 process on :8000.
+# Idempotent: skip cleanly if .env not yet configured.
+AIKIT_DIR="${AIKIT_DIR:-/home/ubuntu/aikit}"
+AIKIT_REPO="https://github.com/pauldevelopai/aikit.git"
+
+log "Setting up AIKit at $AIKIT_DIR…"
+sudo apt-get install -y python3-venv python3-pip libpq-dev >/dev/null 2>&1
+
+if [[ -d "$AIKIT_DIR/.git" ]]; then
+  log "AIKit repo exists — pulling latest…"
+  git -C "$AIKIT_DIR" fetch --all
+  git -C "$AIKIT_DIR" reset --hard origin/main
+else
+  log "Cloning AIKit…"
+  git clone "$AIKIT_REPO" "$AIKIT_DIR"
+fi
+
+if [[ ! -d "$AIKIT_DIR/venv" ]]; then
+  python3 -m venv "$AIKIT_DIR/venv"
+fi
+"$AIKIT_DIR/venv/bin/pip" install --quiet --upgrade pip
+"$AIKIT_DIR/venv/bin/pip" install --quiet -r "$AIKIT_DIR/requirements.txt"
+
+if [[ ! -f "$AIKIT_DIR/.env" ]]; then
+  warn "No .env at $AIKIT_DIR/.env — AIKit won't start until you create one."
+  warn "Template: cp $AIKIT_DIR/.env.example $AIKIT_DIR/.env  then fill in DATABASE_URL, JWT_SECRET_KEY, OPENAI_API_KEY, ADMIN_PASSWORD."
+else
+  # Create toolkitrag DB if missing (idempotent).
+  AIKIT_DB=$(grep ^DATABASE_URL "$AIKIT_DIR/.env" | sed 's|.*/||' | tr -d '"')
+  if [[ -n "$AIKIT_DB" ]]; then
+    sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$AIKIT_DB'" 2>/dev/null | grep -q 1 || \
+      sudo -u postgres createdb "$AIKIT_DB" 2>/dev/null || true
+  fi
+
+  log "Running AIKit migrations (alembic)…"
+  ( cd "$AIKIT_DIR" && "$AIKIT_DIR/venv/bin/alembic" upgrade head ) || \
+    warn "AIKit alembic upgrade failed — check $AIKIT_DIR/alembic.ini + DATABASE_URL."
+
+  log "Starting / reloading AIKit via pm2…"
+  if pm2 list | grep -q aikit-server; then
+    pm2 reload aikit-server --update-env
+  else
+    ( cd "$AIKIT_DIR" && \
+      pm2 start "$AIKIT_DIR/venv/bin/uvicorn" \
+        --name aikit-server \
+        --interpreter none \
+        -- app.main:app --host 127.0.0.1 --port 8000 )
+    pm2 save
+  fi
+
+  sleep 2
+  if ! curl -sSf http://127.0.0.1:8000/ >/dev/null 2>&1; then
+    warn "AIKit on 127.0.0.1:8000 isn't responding. Check: pm2 logs aikit-server"
+  fi
+fi
+
 # ── 6.5 Make /home/ubuntu traversable by Caddy ───────────────────────────────
 # Lightsail's default /home/ubuntu is 750, which blocks the caddy user from
 # reaching the SPA static files. +x on "other" lets Caddy traverse into

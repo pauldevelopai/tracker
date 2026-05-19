@@ -67,6 +67,56 @@ app.use('/api/public', publicRoutes);
 // so social crawlers see real titles/descriptions instead of the SPA default.
 app.use(publicHtmlRoutes);
 
+// AIKit (Tool Tracker) — reverse-proxied from its FastAPI app on port 8000.
+// The proxy strips the /aikit prefix so AIKit sees / instead of /aikit/, then
+// rewrites HTML href/action/src/hx-* so they're prefixed back with /aikit
+// (AIKit's templates use absolute root paths). Redirect Location headers
+// get the same treatment.
+import { createProxyMiddleware } from 'http-proxy-middleware';
+
+function rewriteAikitHtml(html) {
+  return html.replace(
+    /\b(href|action|src|hx-(?:get|post|put|delete))="(\/(?!\/)[^"]*)"/g,
+    (match, attr, path) => {
+      if (path.startsWith('/aikit')) return match;
+      return `${attr}="/aikit${path}"`;
+    }
+  );
+}
+
+app.use('/aikit', createProxyMiddleware({
+  target: 'http://127.0.0.1:8000',
+  changeOrigin: true,
+  pathRewrite: { '^/aikit': '' },
+  ws: false,
+  selfHandleResponse: true,
+  on: {
+    proxyRes(proxyRes, req, res) {
+      const loc = proxyRes.headers['location'];
+      if (loc && loc.startsWith('/') && !loc.startsWith('//') && !loc.startsWith('/aikit')) {
+        proxyRes.headers['location'] = '/aikit' + loc;
+      }
+      const isHtml = (proxyRes.headers['content-type'] || '').includes('text/html');
+      if (!isHtml) {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+        return;
+      }
+      const chunks = [];
+      proxyRes.on('data', c => chunks.push(c));
+      proxyRes.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        const rewritten = rewriteAikitHtml(body);
+        const headers = { ...proxyRes.headers };
+        delete headers['content-length'];
+        delete headers['content-encoding'];
+        res.writeHead(proxyRes.statusCode, headers);
+        res.end(rewritten);
+      });
+    },
+  },
+}));
+
 // OpenAPI spec + Redoc docs. Mounted before the rate-limited /api/v1 prefix so
 // loading the docs page doesn't count against a consumer's daily quota.
 import { readFileSync } from 'node:fs';
