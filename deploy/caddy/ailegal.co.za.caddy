@@ -15,14 +15,12 @@ ailegal.co.za, www.ailegal.co.za, grounded.developai.co.za {
     encode gzip zstd
     root * /home/ubuntu/tracker/client/dist
 
-    # ── Public API + versioned API → Node ────────────────────────────────
-    handle /api/public/* {
-        reverse_proxy localhost:3001
-    }
-    handle /api/v1/* {
-        reverse_proxy localhost:3001
-    }
-    handle /api/v1 {
+    # ── All /api/* → Node ────────────────────────────────────────────────
+    # Catches /api/auth/*, /api/public/*, /api/v1/* and any future routes.
+    # Previously only the first two were forwarded, which silently broke
+    # admin login on prod (POST /api/auth/login was being absorbed by the
+    # SPA fallback and returning 405).
+    handle /api/* {
         reverse_proxy localhost:3001
     }
 
