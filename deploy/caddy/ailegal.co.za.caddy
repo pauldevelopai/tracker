@@ -44,9 +44,13 @@ ailegal.co.za, www.ailegal.co.za, grounded.developai.co.za {
     }
 
     # ── Back-compat: old /aikit/* URL → /tools/* (legacy bookmarks) ──────
-    @aikit_legacy path_regexp aikit ^/aikit(/.*)?$
-    handle @aikit_legacy {
-        redir /tools{re.aikit.1} 301
+    # handle_path strips the /aikit prefix, so {uri} = the remaining path
+    # (e.g. /tools, /tools/foo). redir prepends /tools.
+    handle_path /aikit/* {
+        redir /tools{uri} 301
+    }
+    handle /aikit {
+        redir /tools/ 301
     }
 
     # ── Hashed Vite bundles → static + year-long immutable cache ─────────
