@@ -1,10 +1,21 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
+
+// Where to send the user after a successful sign-in. Honours ?next=<path>
+// (used by AIKit pages so logins there return to where the user was) but
+// only allows in-app paths, never external URLs.
+function safeNext(raw) {
+  if (!raw) return null;
+  if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+  return raw;
+}
 
 export default function Login() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = safeNext(searchParams.get('next'));
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,10 +43,18 @@ export default function Login() {
     try {
       if (mode === 'login') {
         const user = await login(email, password);
-        navigate(user.role === 'admin' ? '/' : '/lawsuits');
+        if (next) {
+          // safeNext already validated this is an in-app path. Use
+          // window.location for /aikit/* (Express-served) so the page
+          // reloads against the new session cookies.
+          window.location.href = next;
+        } else {
+          navigate(user.role === 'admin' ? '/' : '/lawsuits');
+        }
       } else {
         await register(name.trim(), email, password);
-        navigate('/lawsuits');
+        if (next) window.location.href = next;
+        else navigate('/lawsuits');
       }
     } catch (err) {
       setError(err.message || (mode === 'login' ? 'Login failed' : 'Registration failed'));
@@ -47,7 +66,7 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Holly</h1>
+        <h1>Tracker</h1>
         <p>{mode === 'login' ? 'Sign in to Develop AI' : 'Create your account'}</p>
 
         {error && <div className="login-error">{error}</div>}

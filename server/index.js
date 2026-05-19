@@ -78,6 +78,19 @@ function rewriteAikitHtml(html) {
   return html.replace(
     /\b(href|action|src|hx-(?:get|post|put|delete))="(\/(?!\/)[^"]*)"/g,
     (match, attr, path) => {
+      // AIKit's logout form posts to /auth/logout — route to tracker's
+      // unified /api/auth/logout so both cookies (tracker_token + session)
+      // get cleared together.
+      if (path === '/auth/logout') return `${attr}="/api/auth/logout"`;
+      // AIKit's own login/register links go to tracker's unified /login
+      // form with a ?next= back to /aikit/ so the SSO bridge in
+      // routes/auth.js mirrors the new tracker session into AIKit.
+      if (path === '/login' || path.startsWith('/login?')) {
+        return `${attr}="/login?next=/aikit/"`;
+      }
+      if (path === '/register' || path.startsWith('/register?')) {
+        return `${attr}="/login?next=/aikit/"`;
+      }
       if (path.startsWith('/aikit')) return match;
       return `${attr}="/aikit${path}"`;
     }
@@ -92,9 +105,16 @@ app.use('/aikit', createProxyMiddleware({
   selfHandleResponse: true,
   on: {
     proxyRes(proxyRes, req, res) {
+      // Rewrite redirect Location headers. Same special cases as
+      // rewriteAikitHtml so the user lands at tracker's unified /login.
       const loc = proxyRes.headers['location'];
-      if (loc && loc.startsWith('/') && !loc.startsWith('//') && !loc.startsWith('/aikit')) {
-        proxyRes.headers['location'] = '/aikit' + loc;
+      if (loc && loc.startsWith('/') && !loc.startsWith('//')) {
+        if (loc === '/login' || loc.startsWith('/login?') ||
+            loc === '/register' || loc.startsWith('/register?')) {
+          proxyRes.headers['location'] = '/login?next=/aikit/';
+        } else if (!loc.startsWith('/aikit')) {
+          proxyRes.headers['location'] = '/aikit' + loc;
+        }
       }
       const isHtml = (proxyRes.headers['content-type'] || '').includes('text/html');
       if (!isHtml) {

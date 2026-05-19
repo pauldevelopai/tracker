@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../db/pool.js';
 import config from '../config.js';
 import { requireAuth } from '../middleware/auth.js';
+import { bridgeAikitLogin, bridgeAikitLogout } from '../services/aikit-bridge.js';
 
 const router = Router();
 
@@ -42,6 +43,9 @@ router.post('/login', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
     });
+
+    // Mirror sign-in into AIKit so /aikit/* is also authenticated.
+    await bridgeAikitLogin(res, user);
 
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
@@ -93,6 +97,9 @@ router.post('/register', async (req, res) => {
       path: '/',
     });
 
+    // Mirror sign-in into AIKit so /aikit/* is also authenticated.
+    await bridgeAikitLogin(res, user);
+
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     console.error('Register error:', err);
@@ -100,8 +107,18 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
   res.clearCookie('tracker_token', { path: '/' });
+  await bridgeAikitLogout(req, res);
+
+  // AIKit's HTML logout form submits with Accept: text/html and expects a
+  // redirect, not JSON. Detect that and bounce to /legal so the user lands
+  // somewhere coherent. Programmatic JSON callers (Accept: application/json)
+  // still get the {ok:true} response.
+  const accept = req.headers.accept || '';
+  if (accept.includes('text/html') && !accept.includes('application/json')) {
+    return res.redirect(303, '/legal');
+  }
   res.json({ ok: true });
 });
 
