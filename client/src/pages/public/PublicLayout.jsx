@@ -58,7 +58,7 @@ export default function PublicLayout() {
             <NavLink to="/legal/regulations" style={navStyle}>Regulations</NavLink>
             <NavLink to="/legal/explore" style={navStyle}>Connections</NavLink>
             <NavLink to="/legal/use-cases" style={navStyle}>Use cases</NavLink>
-            <a href="/aikit/" style={inactiveStyle}>Tools</a>
+            <a href="/tools/" style={inactiveStyle}>Tools</a>
             <NavLink to="/legal/sources" style={navStyle}>Sources</NavLink>
             <NavLink to="/legal/submit" style={navStyle}>Submit</NavLink>
             {user ? (
