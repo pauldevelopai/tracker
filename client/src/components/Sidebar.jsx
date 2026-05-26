@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSectors } from '../context/SectorContext.jsx';
@@ -5,32 +6,46 @@ import NotificationBell from './NotificationBell.jsx';
 
 const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
 
-// Separate top button — returns to the main app/site.
-const dashboardItem = { to: '/', label: 'Dashboard', icon: '~' };
+// Top button → the Grounded command-centre (the stats overview: users, Node
+// usage, feedback, legal counts).
+const dashboardItem = { to: '/admin', label: 'Dashboard', icon: '~' };
 
-const navItems = [
-  { to: '/admin', label: 'Grounded admin', icon: '~' },
-  { to: '/agents', label: 'Agents', icon: '~' },
-  { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
-  { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
-  { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
+// Grounded-only nav — always visible.
+const groundedItems = [
   { to: '/lawsuits', label: 'AI Lawsuit Tracker', icon: '~', group: 'AI Legal' },
   { to: '/regulation-tracker', label: 'AI Regulation Tracker', icon: '~', group: 'AI Legal' },
   { to: '/use-cases-admin', label: 'AI Legal Use Cases', icon: '~', group: 'AI Legal' },
   { to: '/legal-sources', label: 'Legal Sources & Agents', icon: '~', group: 'AI Legal' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'AI Legal' },
+  { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
+  { to: '/settings/team', label: 'Team Members', icon: '~', group: 'Grounded' },
+];
+
+// Everything that isn't Grounded — tucked into a collapsible section at the
+// bottom (collapsed by default). Nothing is lost; it's just out of the way.
+const developAiItems = [
+  { to: '/dashboard', label: 'Dashboard (stats)', icon: '~', group: 'Overview' },
+  { to: '/agents', label: 'Agents', icon: '~', group: 'Overview' },
+  { to: '/contacts', label: 'Contacts', icon: '~', group: 'CRM' },
+  { to: '/organisations', label: 'Organisations', icon: '~', group: 'CRM' },
+  { to: '/programmes', label: 'Cohorts', icon: '~', group: 'CRM' },
+  { to: '/assessments', label: 'Assessments', icon: '~', group: 'CRM' },
+  { to: '/leads', label: 'Leads', icon: '~', group: 'CRM' },
+  { to: '/map', label: 'Map', icon: '~', group: 'CRM' },
+  { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
+  { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
+  { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },
+  { to: '/fundraising', label: 'Pipeline', icon: '~', group: 'Fundraising' },
+  { to: '/fundraising/funders', label: 'Funders', icon: '~', group: 'Fundraising' },
   { to: '/newsletter', label: 'Briefings', icon: '~', group: 'AI' },
   { to: '/intelligence', label: 'Intelligence', icon: '~', group: 'AI' },
   { to: '/knowledge', label: 'Knowledge', icon: '~', group: 'AI' },
   { to: '/database', label: 'Database', icon: '~', group: 'Data' },
-  { to: '/feedback', label: 'Feedback', icon: '~', group: 'Data' },
-];
-
-const adminItems = [
-  { to: '/settings/team', label: 'Team Members', icon: '~', group: 'Settings' },
+  { to: '/settings/sectors', label: 'Sectors', icon: '~', group: 'Settings' },
+  { to: '/settings/gmail', label: 'Gmail', icon: '~', group: 'Settings' },
 ];
 
 function NavItem({ item }) {
@@ -65,7 +80,26 @@ export default function Sidebar() {
   const { sectors, selectedSectorId, setSelectedSectorId } = useSectors();
 
   const isAdmin = user?.role === 'admin';
-  const allItems = isAdmin ? [...navItems, ...adminItems] : [];
+  const [devOpen, setDevOpen] = useState(false);
+
+  // Render a list of nav items, inserting a header each time the group changes.
+  const renderNav = (items) => {
+    let g = null;
+    return items.map((item) => {
+      const showGroup = item.group && item.group !== g;
+      if (showGroup) g = item.group;
+      return (
+        <div key={item.to}>
+          {showGroup && (
+            <div style={{ padding: '16px 20px 6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sidebar-text-muted)' }}>
+              {item.group}
+            </div>
+          )}
+          <NavItem item={item} />
+        </div>
+      );
+    });
+  };
 
   // Non-admin: minimal sidebar — lawsuits only
   if (!isAdmin) {
@@ -105,8 +139,6 @@ export default function Sidebar() {
   }
 
   // Admin: full sidebar
-  let currentGroup = null;
-
   return (
     <aside style={{
       position: 'fixed', top: 0, left: 0,
@@ -139,24 +171,31 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
-        {/* Dashboard — separate top button; returns to the main app/site. */}
+      <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {/* Dashboard — separate top button → the Grounded stats command-centre. */}
         <NavItem item={dashboardItem} />
         <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
-        {allItems.map((item) => {
-          const showGroup = item.group && item.group !== currentGroup;
-          if (showGroup) currentGroup = item.group;
-          return (
-            <div key={item.to}>
-              {showGroup && (
-                <div style={{ padding: '16px 20px 6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--sidebar-text-muted)' }}>
-                  {item.group}
-                </div>
-              )}
-              <NavItem item={item} />
-            </div>
-          );
-        })}
+
+        {/* Grounded — always visible. */}
+        {renderNav(groundedItems)}
+
+        {/* Everything else, collapsed into a "Develop AI" section at the bottom. */}
+        <div style={{ marginTop: 'auto', paddingTop: 8 }}>
+          <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 0 8px' }} />
+          <button
+            onClick={() => setDevOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              width: '100%', padding: '10px 20px', background: 'transparent', border: 'none',
+              color: 'var(--sidebar-text-muted)', fontSize: '11px', fontWeight: '600',
+              textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer',
+            }}
+          >
+            <span>Develop AI</span>
+            <span style={{ fontSize: 10 }}>{devOpen ? '▾' : '▸'}</span>
+          </button>
+          {devOpen && renderNav(developAiItems)}
+        </div>
       </nav>
 
       {/* User */}
