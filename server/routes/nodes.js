@@ -115,6 +115,7 @@ router.get('/admin/overview', requireAuth, requireRole('admin'), async (req, res
 
     let hosted = [];
     let feedback = [];
+    let recent = [];
     if (reg.activity) {
       const usage = await pool.query(`
         SELECT a.newsroom_id,
@@ -160,6 +161,16 @@ router.get('/admin/overview', requireAuth, requireRole('admin'), async (req, res
         LIMIT 200
       `);
       feedback = fb.rows;
+
+      const rec = await pool.query(`
+        SELECT a.ts, a.kind, a.op, a.story_count, a.source,
+               tm.email AS member_email
+        FROM node_analytics_activity a
+        LEFT JOIN team_members tm ON tm.id::text = a.newsroom_id
+        ORDER BY a.ts DESC
+        LIMIT 25
+      `);
+      recent = rec.rows;
     }
 
     await ensureBeaconTable();
@@ -170,7 +181,7 @@ router.get('/admin/overview', requireAuth, requireRole('admin'), async (req, res
       ORDER BY last_seen DESC
     `);
 
-    res.json({ hosted, feedback, local });
+    res.json({ hosted, feedback, local, recent });
   } catch (err) {
     console.error('[nodes/admin/overview]', err.message);
     res.status(500).json({ message: 'Internal server error' });
