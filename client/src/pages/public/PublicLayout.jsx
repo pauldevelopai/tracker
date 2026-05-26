@@ -65,6 +65,13 @@ export default function PublicLayout() {
             <a href="/nodes/" style={inactiveStyle}>Nodes</a>
             {user ? (
               <>
+                {/* Logged-in users get a way into the app shell (sidebar +
+                    dashboards). Admins → the Grounded command-centre; everyone
+                    else → the tracker they can use. */}
+                <Link to={user.role === 'admin' ? '/admin' : '/lawsuits'}
+                      style={{ ...inactiveStyle, fontWeight: 600, color: 'white', background: 'var(--accent)' }}>
+                  {user.role === 'admin' ? 'Admin' : 'Open app'}
+                </Link>
                 <span style={{ ...inactiveStyle, color: 'var(--text-primary)', fontWeight: 600 }}>Hi, {firstName}</span>
                 <button onClick={async () => { await logout(); window.location.reload(); }}
                         style={{ ...inactiveStyle, background: 'transparent', border: '1px solid var(--border-color)', cursor: 'pointer' }}>
