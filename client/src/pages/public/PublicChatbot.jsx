@@ -83,8 +83,8 @@ export default function PublicChatbot() {
         onClick={() => setOpen(true)}
         aria-label="Open Grounded: AI Legal assistant"
         style={{
-          position: 'fixed', right: 20, bottom: 20, zIndex: 100,
-          width: 56, height: 56, borderRadius: '50%',
+          position: 'fixed', right: 20, bottom: 80, zIndex: 999,
+          width: 52, height: 52, borderRadius: '50%',
           background: 'var(--accent)', color: 'white',
           border: 'none', cursor: 'pointer',
           boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
@@ -97,7 +97,7 @@ export default function PublicChatbot() {
 
   return (
     <div style={{
-      position: 'fixed', right: 20, bottom: 20, zIndex: 100,
+      position: 'fixed', right: 20, bottom: 20, zIndex: 1004,
       width: 380, maxWidth: 'calc(100vw - 40px)',
       height: 560, maxHeight: 'calc(100vh - 40px)',
       background: 'var(--card-bg)', color: 'var(--text-primary)',

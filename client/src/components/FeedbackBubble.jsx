@@ -43,10 +43,10 @@ export default function FeedbackBubble() {
       <button
         onClick={() => setOpen(!open)}
         style={{
-          position: 'fixed', bottom: 80, right: 24, width: 44, height: 44,
+          position: 'fixed', bottom: 20, right: 20, width: 48, height: 48,
           borderRadius: '50%', background: '#F59E0B', color: 'white', border: 'none',
-          fontSize: 20, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-          zIndex: 998, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 22, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
         title="Submit feedback"
       >
@@ -56,9 +56,9 @@ export default function FeedbackBubble() {
       {/* Feedback form */}
       {open && (
         <div style={{
-          position: 'fixed', bottom: 130, right: 24, width: 320,
+          position: 'fixed', bottom: 80, right: 20, width: 320,
           background: 'white', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-          zIndex: 999, padding: 20, border: '1px solid var(--border-color)',
+          zIndex: 1003, padding: 20, border: '1px solid var(--border-color)',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h4 style={{ margin: 0, fontSize: 15 }}>Submit Feedback</h4>
