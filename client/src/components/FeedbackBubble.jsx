@@ -68,7 +68,7 @@ export default function FeedbackBubble() {
           {sent ? (
             <div style={{ textAlign: 'center', padding: 20, color: 'var(--success)' }}>
               <div style={{ fontSize: 24, marginBottom: 8 }}>Submitted</div>
-              <div style={{ fontSize: 13 }}>View all feedback in the sidebar</div>
+              <div style={{ fontSize: 13 }}>Thanks — we've logged it.</div>
             </div>
           ) : (
             <form onSubmit={handleSubmit}>

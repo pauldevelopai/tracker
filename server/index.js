@@ -43,6 +43,7 @@ import usecasesRoutes from './routes/usecases.js';
 import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
 import nodesRoutes from './routes/nodes.js';
+import adminOverviewRoutes from './routes/admin.js';
 import { startScheduler } from './services/scheduler.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
@@ -251,6 +252,7 @@ const admin = express.Router();
 admin.use(requireAuth);
 admin.use(requireRole('admin'));
 
+admin.use('/admin',                adminOverviewRoutes);
 admin.use('/sectors',              sectorRoutes);
 admin.use('/contacts',             sectorFilter, contactRoutes);
 admin.use('/organisations',        sectorFilter, organisationRoutes);

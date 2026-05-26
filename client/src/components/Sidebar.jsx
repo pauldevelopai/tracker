@@ -6,6 +6,7 @@ import NotificationBell from './NotificationBell.jsx';
 const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
 
 const navItems = [
+  { to: '/admin', label: 'Grounded admin', icon: '~' },
   { to: '/', label: 'Dashboard', icon: '~' },
   { to: '/agents', label: 'Agents', icon: '~' },
   { to: '/contacts', label: 'Contacts', icon: '~', group: 'CRM' },

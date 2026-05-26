@@ -62,6 +62,7 @@ import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
+import AdminOverview from './pages/admin/AdminOverview.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -130,6 +131,7 @@ export default function App() {
 
               {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
               <Route element={<AdminRoute />}>
+                <Route path="/admin" element={<AdminOverview />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/contacts" element={<ContactsList />} />
                 <Route path="/contacts/:id" element={<ContactDetail />} />

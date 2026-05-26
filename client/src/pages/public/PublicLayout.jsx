@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import FeedbackBubble from '../../components/FeedbackBubble.jsx';
 
 // Lazy so the chatbot bundle doesn't block first paint — it's only used
 // once a visitor clicks the 💬 button.
@@ -23,7 +24,7 @@ export default function PublicLayout() {
   const location = useLocation();
   useEffect(() => {
     const prev = document.title;
-    document.title = 'Grounded: AI Legal — Global AI Lawsuits & Regulations Tracker';
+    document.title = 'Grounded — Newsroom-owned AI';
     return () => { document.title = prev; };
   }, []);
 
@@ -46,9 +47,9 @@ export default function PublicLayout() {
         }}>
           <Link to="/" style={{ textDecoration: 'none', color: 'var(--text-primary)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>Grounded: AI&nbsp;Legal</span>
+              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.01em' }}>Grounded</span>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                Global AI lawsuits &amp; regulations tracker
+                Newsroom-owned AI &middot; by Develop&nbsp;AI
               </span>
             </div>
           </Link>
@@ -84,6 +85,8 @@ export default function PublicLayout() {
       </main>
 
       <Suspense fallback={null}><PublicChatbot /></Suspense>
+      {/* Signed-in visitors can send feedback from anywhere on the public site. */}
+      {user && <FeedbackBubble />}
 
       <footer style={{
         borderTop: '1px solid var(--border-color)', background: 'var(--card-bg)',
@@ -95,7 +98,7 @@ export default function PublicLayout() {
           fontSize: 12, color: 'var(--text-secondary)',
         }}>
           <span>© Grounded · <a href="https://grounded.developai.co.za" style={{ color: 'var(--text-secondary)' }}>grounded.developai.co.za</a></span>
-          <span>Tracking global AI lawsuits and regulations</span>
+          <span>Newsroom-owned AI tools · an open tracker of AI in law · by Develop AI</span>
         </div>
       </footer>
     </div>

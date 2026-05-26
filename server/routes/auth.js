@@ -36,6 +36,9 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    // Record sign-in time for the Grounded admin overview (best-effort).
+    pool.query('UPDATE team_members SET last_login = NOW() WHERE id = $1', [user.id]).catch(() => {});
+
     res.cookie('tracker_token', token, {
       httpOnly: true,
       sameSite: 'lax',
