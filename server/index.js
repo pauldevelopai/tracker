@@ -42,6 +42,7 @@ import legalSourcesRoutes from './routes/legal-sources.js';
 import usecasesRoutes from './routes/usecases.js';
 import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
+import nodesRoutes from './routes/nodes.js';
 import { startScheduler } from './services/scheduler.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
@@ -227,6 +228,10 @@ app.get('/api/v1', (req, res) => {
 });
 // Participant portal: public, token-authenticated
 app.use('/api/portal', participantPortalRoutes);
+// GROUNDED Nodes: POST /api/nodes/beacon is public (opt-in local-install
+// heartbeat); GET /api/nodes/admin/overview self-guards with requireAuth +
+// requireRole('admin') inside the router.
+app.use('/api/nodes', nodesRoutes);
 // Lawsuits: all authenticated users (admin + member roles)
 app.use('/api/lawsuits', requireAuth, lawsuitRoutes);
 // Regulations: all authenticated users (admin + member roles)

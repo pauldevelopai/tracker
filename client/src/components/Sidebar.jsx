@@ -21,6 +21,7 @@ const navItems = [
   { to: '/regulation-tracker', label: 'AI Regulation Tracker', icon: '~', group: 'AI Legal' },
   { to: '/use-cases-admin', label: 'AI Legal Use Cases', icon: '~', group: 'AI Legal' },
   { to: '/legal-sources', label: 'Legal Sources & Agents', icon: '~', group: 'AI Legal' },
+  { to: '/node-admin', label: 'Nodes', icon: '~', group: 'AI Legal' },
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },

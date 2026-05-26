@@ -61,6 +61,7 @@ import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
+import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -172,6 +173,7 @@ export default function App() {
                 <Route path="/agents/leads" element={<LeadFinderAgent />} />
                 <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
                 <Route path="/feedback" element={<FeedbackList />} />
+                <Route path="/node-admin" element={<NodesAdmin />} />
               </Route>
 
             </Route>
