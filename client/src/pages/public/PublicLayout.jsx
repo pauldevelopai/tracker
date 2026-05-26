@@ -61,6 +61,7 @@ export default function PublicLayout() {
             <a href="/tools/" style={inactiveStyle}>Tools</a>
             <NavLink to="/legal/sources" style={navStyle}>Sources</NavLink>
             <NavLink to="/legal/submit" style={navStyle}>Submit</NavLink>
+            <a href="/nodes/" style={inactiveStyle}>Nodes</a>
             {user ? (
               <>
                 <span style={{ ...inactiveStyle, color: 'var(--text-primary)', fontWeight: 600 }}>Hi, {firstName}</span>
