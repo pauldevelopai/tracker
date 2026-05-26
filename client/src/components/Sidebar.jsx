@@ -5,16 +5,12 @@ import NotificationBell from './NotificationBell.jsx';
 
 const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
 
+// Separate top button — returns to the main app/site.
+const dashboardItem = { to: '/', label: 'Dashboard', icon: '~' };
+
 const navItems = [
   { to: '/admin', label: 'Grounded admin', icon: '~' },
-  { to: '/', label: 'Dashboard', icon: '~' },
   { to: '/agents', label: 'Agents', icon: '~' },
-  { to: '/contacts', label: 'Contacts', icon: '~', group: 'CRM' },
-  { to: '/organisations', label: 'Organisations', icon: '~', group: 'CRM' },
-  { to: '/programmes', label: 'Cohorts', icon: '~', group: 'CRM' },
-  { to: '/assessments', label: 'Assessments', icon: '~', group: 'CRM' },
-  { to: '/leads', label: 'Leads', icon: '~', group: 'CRM' },
-  { to: '/map', label: 'Map', icon: '~', group: 'CRM' },
   { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
   { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
@@ -26,8 +22,6 @@ const navItems = [
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },
-  { to: '/fundraising', label: 'Pipeline', icon: '~', group: 'Fundraising' },
-  { to: '/fundraising/funders', label: 'Funders', icon: '~', group: 'Fundraising' },
   { to: '/newsletter', label: 'Briefings', icon: '~', group: 'AI' },
   { to: '/intelligence', label: 'Intelligence', icon: '~', group: 'AI' },
   { to: '/knowledge', label: 'Knowledge', icon: '~', group: 'AI' },
@@ -36,9 +30,7 @@ const navItems = [
 ];
 
 const adminItems = [
-  { to: '/settings/sectors', label: 'Sectors', icon: '~', group: 'Settings' },
   { to: '/settings/team', label: 'Team Members', icon: '~', group: 'Settings' },
-  { to: '/settings/gmail', label: 'Gmail', icon: '~', group: 'Settings' },
 ];
 
 function NavItem({ item }) {
@@ -148,6 +140,9 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
+        {/* Dashboard — separate top button; returns to the main app/site. */}
+        <NavItem item={dashboardItem} />
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
         {allItems.map((item) => {
           const showGroup = item.group && item.group !== currentGroup;
           if (showGroup) currentGroup = item.group;
