@@ -5,3 +5,10 @@ uploads/*
 !uploads/.gitkeep
 .DS_Store
 logs/
+.claude/
+
+# Local database dumps — may contain real user data. NEVER commit.
+# (Anchored to repo root so it won't touch server/db/migrations/*.sql.)
+/holly.sql
+/*.dump
+/*.sql.gz
