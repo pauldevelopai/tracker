@@ -47,17 +47,19 @@ cd /home/ubuntu/tracker && bash deploy.sh
 
 ## The Nodes system (how to add one)
 
-Nodes are separate repos (`pauldevelopai/node-<slug>`) built on the shared runtime `@developai/grounded-node-runtime`:
+Nodes are separate repos (`pauldevelopai/node-<slug>`) built on the shared runtime `@developai/grounded-node-runtime` (current tag **`v0.9.0`**):
 - **Local** = `createServer({ slug, host: createLiteHost(...), handlers })` (index.js).
-- **Hosted** = `createHostedServer({ slug, handlers, ensureSchema, productName, staticDir })` (server-hosted.js) — verifies the `tracker_token` cookie, scopes a per-request Postgres host, injects the Grounded nav + feedback + "run locally" footer.
+- **Hosted** = `createHostedServer({ slug, handlers, ensureSchema?, mountRoutes?, productName, staticDir })` (server-hosted.js) — verifies the `tracker_token` cookie, scopes a per-request Postgres host, injects the Grounded nav + feedback + "run locally" footer.
+- **Two storage patterns:** Postgres tables via `ensureSchema` (node-analytics), or per-newsroom key/value via `host.store` + custom routes via `mountRoutes` (node-verifier). The latter (runtime v0.9.0) is how file-based Nodes go multi-tenant.
 
-**To add a Node, see `pauldevelopai/nodes` → `ADD_A_NODE.md`.** Short version: build the repo from the `node-analytics` pattern → add an entry to `nodes/nodes.json` (front door renders from it) → for hosting, run `nodes/deploy-node.sh <slug> <port>` on the box and paste the Caddy block it prints.
+**To add a Node, see `pauldevelopai/nodes` → `HANDOVER.md` (whole-system map) then `ADD_A_NODE.md` (the recipe).** Short version: build the repo from the `node-analytics` or `node-verifier` pattern → add an entry to `nodes/nodes.json` (front door renders from it) → for hosting, run `nodes/deploy-node.sh <slug> <port>` on the box and paste the Caddy block it prints.
 
-**GOTCHA (npm + github deps):** Nodes pin the runtime to a tag (`github:pauldevelopai/grounded-node-runtime#v0.8.0`). `npm install` can serve a STALE cached copy — if a Node runs old runtime code, force it: `rm -rf node_modules/@developai && npm install`.
+**GOTCHA (npm + github deps):** Nodes pin the runtime to a tag (`github:pauldevelopai/grounded-node-runtime#v0.9.0`). `npm install` can serve a STALE cached copy — if a Node runs old runtime code, force it: `rm -rf node_modules/@developai && npm install`.
 
 ## Repos
 - `pauldevelopai/tracker` (this) — AI Legal site + admin + the Grounded shell.
 - `pauldevelopai/nodes` — front door (`grounded.developai.co.za/nodes/`), registry, deploy tooling, `ADD_A_NODE.md`.
 - `pauldevelopai/grounded-node-runtime` — shared `createServer` / `createHostedServer` / hosts. Versioned + tagged.
-- `pauldevelopai/node-analytics` — Audience Signal (the reference Node, local + hosted).
-- `pauldevelopai/node-podcasting` — Podcast Studio (download works; hosted not wired — audio app, needs custom-routes + blob storage).
+- `pauldevelopai/node-analytics` — Audience Signal (reference Node for the Postgres-table pattern; local + hosted).
+- `pauldevelopai/node-verifier` — Election Watch (reference Node for the host.store + mountRoutes pattern; local + hosted). Internal slug stays `capitalfm-verifier` for data continuity; display name is de-branded.
+- `pauldevelopai/node-podcasting` — Podcast Studio (download works; hosted not wired — audio app, still needs blob storage).
