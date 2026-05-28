@@ -78,20 +78,27 @@ export default function PublicChatbot() {
   }
 
   if (!open) {
+    // Round terracotta icon button — identical to the shared chrome.js chat bubble.
+    // Stacks directly above the feedback bubble (which owns the corner at bottom:20).
     return (
       <button
         onClick={() => setOpen(true)}
         aria-label="Open Grounded: AI Legal assistant"
         style={{
-          position: 'fixed', right: 20, bottom: 80, zIndex: 999,
+          position: 'fixed', right: 20, bottom: 84, zIndex: 999,
           width: 52, height: 52, borderRadius: '50%',
-          background: 'var(--accent)', color: 'white',
+          background: '#c4761b', color: 'white',
           border: 'none', cursor: 'pointer',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.2)',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 24,
         }}
-      >💬</button>
+        onMouseEnter={e => (e.currentTarget.style.background = '#a8543a')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#c4761b')}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        </svg>
+      </button>
     );
   }
 

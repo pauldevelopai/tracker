@@ -54,18 +54,25 @@ export default function FeedbackBubble() {
 
   return (
     <>
-      {/* Floating "Feedback" pill — consistent with the hosted-Node widget. */}
+      {/* Round terracotta icon button — identical to the shared chrome.js bubble.
+          Feedback sits in the corner (bottom:20); the chat bubble stacks above it. */}
       <button
         onClick={() => setOpen(!open)}
         style={{
-          position: 'fixed', bottom: 20, right: 20,
-          borderRadius: 999, background: '#F59E0B', color: 'white', border: 'none',
-          padding: '11px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          boxShadow: '0 4px 14px rgba(0,0,0,0.2)', zIndex: 1000,
+          position: 'fixed', bottom: 20, right: 20, width: 52, height: 52,
+          borderRadius: '50%', background: '#c4761b', color: 'white', border: 'none',
+          cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.25)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#a8543a')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#c4761b')}
         title="Send feedback about any part of Grounded"
+        aria-label="Send feedback"
       >
-        Feedback
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
       </button>
 
       {open && (
