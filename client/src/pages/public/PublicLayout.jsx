@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState, useRef } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
@@ -18,6 +18,74 @@ const navStyle = ({ isActive }) => ({
 });
 
 const inactiveStyle = navStyle({ isActive: false });
+
+// The two top-level groups. Builder = the tools you run/own (external apps);
+// Tracker = the AI Legal dataset (internal routes).
+const BUILDER_ITEMS = [
+  { label: 'Nodes', to: '/nodes/', external: true },
+  { label: 'Tools', to: '/tools/', external: true },
+];
+const TRACKER_ITEMS = [
+  { label: 'Lawsuits', to: '/legal/lawsuits' },
+  { label: 'Regulations', to: '/legal/regulations' },
+  { label: 'Connections', to: '/legal/explore' },
+  { label: 'Use cases', to: '/legal/use-cases' },
+  { label: 'Sources', to: '/legal/sources' },
+];
+
+const dropItemStyle = {
+  display: 'block', padding: '8px 12px', fontSize: 14,
+  color: 'var(--text-primary)', textDecoration: 'none',
+  borderRadius: 6, whiteSpace: 'nowrap',
+};
+
+// A top-nav dropdown: click to toggle, closes on outside-click or item-click.
+function NavDropdown({ label, items, activeWhen }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const location = useLocation();
+  const active = items.some(i => !i.external && location.pathname.startsWith(i.to)) || activeWhen?.(location.pathname);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          ...navStyle({ isActive: active }),
+          display: 'flex', alignItems: 'center', gap: 4,
+          border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          background: active || open ? '#EEF2FF' : 'transparent',
+        }}
+      >
+        {label} <span style={{ fontSize: 10 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 180,
+          background: 'var(--card-bg)', border: '1px solid var(--border-color)',
+          borderRadius: 'var(--radius)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+          padding: 6, zIndex: 20, display: 'flex', flexDirection: 'column',
+        }}>
+          {items.map(it => it.external ? (
+            <a key={it.to} href={it.to} style={dropItemStyle} onClick={() => setOpen(false)}>{it.label}</a>
+          ) : (
+            <NavLink key={it.to} to={it.to} onClick={() => setOpen(false)}
+                     style={({ isActive }) => ({ ...dropItemStyle, background: isActive ? '#EEF2FF' : 'transparent', fontWeight: isActive ? 600 : 500 })}>
+              {it.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function PublicLayout() {
   const { user, logout } = useAuth();
@@ -55,14 +123,8 @@ export default function PublicLayout() {
           </Link>
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
-            <NavLink to="/legal/lawsuits" style={navStyle}>Lawsuits</NavLink>
-            <NavLink to="/legal/regulations" style={navStyle}>Regulations</NavLink>
-            <NavLink to="/legal/explore" style={navStyle}>Connections</NavLink>
-            <NavLink to="/legal/use-cases" style={navStyle}>Use cases</NavLink>
-            <a href="/tools/" style={inactiveStyle}>Tools</a>
-            <NavLink to="/legal/sources" style={navStyle}>Sources</NavLink>
-            <NavLink to="/legal/submit" style={navStyle}>Submit</NavLink>
-            <a href="/nodes/" style={inactiveStyle}>Nodes</a>
+            <NavDropdown label="Builder" items={BUILDER_ITEMS} />
+            <NavDropdown label="Tracker" items={TRACKER_ITEMS} />
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +
@@ -92,8 +154,9 @@ export default function PublicLayout() {
       </main>
 
       <Suspense fallback={null}><PublicChatbot /></Suspense>
-      {/* Signed-in visitors can send feedback from anywhere on the public site. */}
-      {user && <FeedbackBubble />}
+      {/* The universal "submit anything about Grounded" entry point. Shown to
+          everyone; logged-out visitors get a sign-in prompt inside it. */}
+      <FeedbackBubble />
 
       <footer style={{
         borderTop: '1px solid var(--border-color)', background: 'var(--card-bg)',

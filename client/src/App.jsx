@@ -74,7 +74,6 @@ import PublicRegulationDetail from './pages/public/PublicRegulationDetail.jsx';
 // pulls in react-force-graph-2d + d3-force (~300KB gzipped on its own).
 const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
-const PublicSubmit   = lazy(() => import('./pages/public/PublicSubmit.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -111,7 +110,8 @@ export default function App() {
             <Route path="regulations/:id" element={<PublicRegulationDetail />} />
             <Route path="explore"        element={<Suspense fallback={<LazyFallback />}><PublicExplore /></Suspense>} />
             <Route path="sources"        element={<Suspense fallback={<LazyFallback />}><PublicSources /></Suspense>} />
-            <Route path="submit"         element={<Suspense fallback={<LazyFallback />}><PublicSubmit /></Suspense>} />
+            {/* Submit is folded into the Feedback mechanism (the bubble). Old links redirect. */}
+            <Route path="submit"         element={<Navigate to="/legal" replace />} />
             <Route path="use-cases"      element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="list" /></Suspense>} />
             <Route path="use-cases/:id"  element={<Suspense fallback={<LazyFallback />}><PublicUseCases mode="detail" /></Suspense>} />
             <Route path="tools"          element={<Suspense fallback={<LazyFallback />}><PublicTools mode="list" /></Suspense>} />
