@@ -77,6 +77,8 @@ const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
 const PublicMonetisation = lazy(() => import('./pages/public/PublicMonetisation.jsx'));
 const PublicToolsDirectory = lazy(() => import('./pages/public/PublicToolsDirectory.jsx'));
 const PublicTraining = lazy(() => import('./pages/public/PublicTraining.jsx'));
+const BuilderPage = lazy(() => import('./pages/builder/BuilderPage.jsx'));
+const RunPage = lazy(() => import('./pages/builder/RunPage.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -194,6 +196,8 @@ export default function App() {
                 <Route path="/feedback" element={<FeedbackList />} />
                 <Route path="/node-admin" element={<NodesAdmin />} />
                 <Route path="/ingestion" element={<IngestionPage />} />
+                <Route path="/builder" element={<Suspense fallback={<LazyFallback />}><BuilderPage /></Suspense>} />
+                <Route path="/run" element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
               </Route>
 
             </Route>
