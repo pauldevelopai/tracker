@@ -39,6 +39,7 @@ import feedbackRoutes from './routes/feedback.js';
 import lawsuitRoutes from './routes/lawsuits.js';
 import regulationRoutes from './routes/regulations.js';
 import legalSourcesRoutes from './routes/legal-sources.js';
+import contentSourcesRoutes from './routes/content-sources.js';
 import usecasesRoutes from './routes/usecases.js';
 import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
@@ -251,6 +252,7 @@ app.use('/api/lawsuits', requireAuth, lawsuitRoutes);
 app.use('/api/regulations', requireAuth, regulationRoutes);
 // Legal sources admin (manages the scraper source pool)
 app.use('/api/legal-sources', requireAuth, legalSourcesRoutes);
+app.use('/api/content-sources', requireAuth, contentSourcesRoutes);
 // AI Legal use-cases CRUD (admin)
 app.use('/api/usecases', requireAuth, usecasesRoutes);
 // AI chatbot: all authenticated users

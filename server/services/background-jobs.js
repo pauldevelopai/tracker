@@ -890,6 +890,22 @@ async function runLegalDateAudit() {
   };
 }
 
+// ── Content pipelines (monetisation, tools, …) ───────────────────────────────
+async function runContentSourcesIngest() {
+  const { dispatchDueContentSources } = await import('./content-ingest/dispatcher.js');
+  const summaries = await dispatchDueContentSources({ limit: 50 });
+  const itemsProcessed = summaries.reduce((acc, s) => acc + (s.items_new || 0), 0);
+  const ok = summaries.filter(s => s.status === 'success').length;
+  const err = summaries.filter(s => s.status === 'error').length;
+  return { result: `Dispatched ${summaries.length} content sources (${ok} ok, ${err} err). New items: ${itemsProcessed}.`, itemsProcessed };
+}
+
+async function runMonetisationTriage() {
+  const { triageMonetisationPending } = await import('./content-ingest/triage-monetisation.js');
+  const s = await triageMonetisationPending({ limit: 30 });
+  return { result: `Monetisation triage: ${s.triaged} seen, ${s.promoted} compiled, ${s.rejected} rejected.`, itemsProcessed: s.triaged || 0 };
+}
+
 export const JOB_REGISTRY = {
   follow_up_monitor: runFollowUpMonitor,
   content_generator: runContentGenerator,
@@ -910,6 +926,8 @@ export const JOB_REGISTRY = {
   legal_courtlistener_sync:   runLegalCourtListenerSync,
   legal_timeline_deepen:      runLegalTimelineDeepen,
   legal_dead_link_check:      runLegalDeadLinkCheck,
+  content_sources_ingest:     runContentSourcesIngest,
+  monetisation_triage:        runMonetisationTriage,
 };
 
 // ── Lawsuit Tracker — scrapes AI litigation news and updates the case database ──
