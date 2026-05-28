@@ -1177,4 +1177,34 @@ router.get('/oss-tools', async (req, res) => {
   }
 });
 
+// Training — videos & materials pulled from published courses + their modules.
+// Curation lever: a course must NOT be 'draft', and a module must have a
+// video_url or content_url. Grouped by course.
+router.get('/training', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id AS course_id, c.title AS course_title, c.description AS course_description,
+              m.id AS module_id, m.title AS module_title, m.description AS module_description,
+              m.video_url, m.content_url, m.duration_minutes
+         FROM courses c
+         JOIN course_modules m ON m.course_id = c.id
+        WHERE c.status <> 'draft'
+          AND ( (m.video_url   IS NOT NULL AND m.video_url   <> '')
+             OR (m.content_url IS NOT NULL AND m.content_url <> '') )
+        ORDER BY c.title, m.order_index`
+    );
+    const courses = {};
+    for (const r of rows) {
+      if (!courses[r.course_id]) courses[r.course_id] = { id: r.course_id, title: r.course_title, description: r.course_description, modules: [] };
+      courses[r.course_id].modules.push({
+        id: r.module_id, title: r.module_title, description: r.module_description,
+        video_url: r.video_url, content_url: r.content_url, duration_minutes: r.duration_minutes,
+      });
+    }
+    res.json({ courses: Object.values(courses) });
+  } catch (err) {
+    res.json({ courses: [] });
+  }
+});
+
 export default router;

@@ -24,13 +24,14 @@ const inactiveStyle = navStyle({ isActive: false });
 const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
   { label: 'Tools', to: '/tools/', external: true },
-  { label: 'Open source', to: '/open-source', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },
   { label: 'Regulations', to: '/legal/regulations' },
   { label: 'Connections', to: '/legal/explore' },
   { label: 'Use cases', to: '/legal/use-cases' },
+];
+const DATA_ITEMS = [
   { label: 'Sources', to: '/legal/sources' },
 ];
 const MONETISATION_ITEMS = [
@@ -131,8 +132,10 @@ export default function PublicLayout() {
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={BUILDER_ITEMS} />
-            <NavDropdown label="Tracker" items={TRACKER_ITEMS} />
+            <NavDropdown label="Tracker" items={TRACKER_ITEMS} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
             <NavDropdown label="Monetisation" items={MONETISATION_ITEMS} activeWhen={p => p.startsWith('/monetisation')} />
+            <NavDropdown label="Data" items={DATA_ITEMS} activeWhen={p => p.startsWith('/legal/sources')} />
+            <NavLink to="/training" style={navStyle}>Training</NavLink>
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +

@@ -161,9 +161,42 @@ app.use('/tools', createProxyMiddleware({
         // Grounded header + chat FAB, so hide those to avoid a double nav/bubble.
         // Inject AFTER rewriteAikitHtml so the /nodes/chrome.js src isn't prefixed
         // to /tools/nodes/chrome.js (rewriteAikitHtml prefixes root-absolute src=).
+        // Open-source tools live as a SECTION within the Tools page (not a
+        // separate menu item) — injected here, fed by /api/public/oss-tools.
+        const ossSection = `
+<style>#gc-oss{max-width:1100px;margin:36px auto;padding:0 24px;font-family:system-ui,-apple-system,sans-serif}
+#gc-oss h2{font-size:22px;font-weight:700;margin:0 0 4px;color:#1A202C}
+#gc-oss .gc-oss-sub{color:#64748b;font-size:14px;margin:0 0 16px}
+#gc-oss .gc-oss-sub a{color:#c4761b;font-weight:600;text-decoration:none}
+#gc-oss .gc-oss-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+#gc-oss .gc-oss-card{border:1px solid #e2e8f0;border-radius:10px;padding:14px;background:#fff}
+#gc-oss .gc-oss-card span{font-size:10px;font-weight:700;text-transform:uppercase;color:#c4761b}
+#gc-oss .gc-oss-card h3{font-size:15px;margin:3px 0 4px}
+#gc-oss .gc-oss-card h3 a{color:#1A202C;text-decoration:none}
+#gc-oss .gc-oss-card p{font-size:12.5px;color:#64748b;margin:0;line-height:1.45}</style>
+<section id="gc-oss" style="display:none">
+  <h2>Open-source tools for newsrooms</h2>
+  <p class="gc-oss-sub">Free, open-source tools and modules your newsroom can adopt, surfaced by our scanner. <a href="/open-source">Browse the full directory &rarr;</a></p>
+  <div class="gc-oss-grid" id="gc-oss-grid"></div>
+</section>
+<script>
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  fetch('/api/public/oss-tools').then(function(r){return r.json();}).then(function(d){
+    var items=(d.items||[]).slice(0,6), g=document.getElementById('gc-oss-grid'), sec=document.getElementById('gc-oss');
+    if(!g||!sec||!items.length)return;
+    g.innerHTML=items.map(function(t){
+      var name=t.url?'<a href="'+esc(t.url)+'" target="_blank" rel="noopener">'+esc(t.name)+'</a>':esc(t.name);
+      return '<div class="gc-oss-card"><span>'+esc(t.category||'tool')+'</span><h3>'+name+'</h3>'+(t.description?'<p>'+esc(t.description)+'</p>':'')+'</div>';
+    }).join('');
+    sec.style.display='block';
+  }).catch(function(){});
+})();
+</script>`;
         const groundedChrome =
           '<style>body>header[style*="z-index:20"]{display:none!important}' +
           '#chat-widget,#chat-fab,#chat-panel{display:none!important}</style>' +
+          ossSection +
           '<script src="/nodes/chrome.js" defer></script>';
         rewritten = rewritten.includes('</body>')
           ? rewritten.replace('</body>', groundedChrome + '</body>')

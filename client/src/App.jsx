@@ -76,6 +76,7 @@ const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
 const PublicMonetisation = lazy(() => import('./pages/public/PublicMonetisation.jsx'));
 const PublicToolsDirectory = lazy(() => import('./pages/public/PublicToolsDirectory.jsx'));
+const PublicTraining = lazy(() => import('./pages/public/PublicTraining.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -127,9 +128,14 @@ export default function App() {
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicMonetisation /></Suspense>} />
           </Route>
 
-          {/* ── Open-source tools directory (Builder) ── */}
+          {/* ── Open-source tools directory (reached from the Tools page) ── */}
           <Route path="/open-source" element={<PublicLayout />}>
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicToolsDirectory /></Suspense>} />
+          </Route>
+
+          {/* ── Training — videos & materials from published courses ── */}
+          <Route path="/training" element={<PublicLayout />}>
+            <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
           <Route element={<ProtectedRoute />}>
