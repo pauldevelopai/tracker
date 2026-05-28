@@ -79,6 +79,8 @@ const PublicToolsDirectory = lazy(() => import('./pages/public/PublicToolsDirect
 const PublicTraining = lazy(() => import('./pages/public/PublicTraining.jsx'));
 const BuilderPage = lazy(() => import('./pages/builder/BuilderPage.jsx'));
 const RunPage = lazy(() => import('./pages/builder/RunPage.jsx'));
+const ToolsHub = lazy(() => import('./pages/toolkit/ToolsHub.jsx'));
+const ToolWorkspace = lazy(() => import('./pages/toolkit/ToolWorkspace.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -148,6 +150,12 @@ export default function App() {
             </Route>
             <Route path="/run" element={<PublicLayout />}>
               <Route index element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
+            </Route>
+            <Route path="/tools-hub" element={<PublicLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><ToolsHub /></Suspense>} />
+            </Route>
+            <Route path="/tool/:slug" element={<PublicLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><ToolWorkspace /></Suspense>} />
             </Route>
           </Route>
 

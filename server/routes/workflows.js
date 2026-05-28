@@ -12,6 +12,7 @@ import { Router } from 'express';
 import pool from '../db/pool.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/nodes.js'; // side-effect: registers the Node blocks
+import '../services/blocks/tools.js'; // side-effect: registers the operations-tool blocks
 import { runWorkflow } from '../services/workflows/runner.js';
 
 const router = Router();
