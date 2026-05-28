@@ -116,15 +116,30 @@ function Inner() {
     } catch (e) { setResult({ status: 'failed', error: e.message }); setRunForm(null); } finally { setBusy(''); }
   }
 
+  function applyDefinition(def, meta) {
+    const bySlug = Object.fromEntries(blocks.map((b) => [b.slug, b]));
+    const rfNodes = (def.nodes || []).map((n, i) => ({
+      id: n.id, type: 'block', position: { x: 120 + (i % 3) * 240, y: 80 + Math.floor(i / 3) * 160 },
+      data: { block: bySlug[n.block || n.agent] || { slug: n.block, name: n.block, icon: '⚙️', inputs: {}, outputs: {}, category: 'agent' }, config: n.config || {} },
+    }));
+    const rfEdges = (def.edges || []).map((e, i) => ({ id: `e${i}`, source: e.from.node, target: e.to.node, targetHandle: e.to.field, animated: true }));
+    setNodes(rfNodes); setEdges(rfEdges);
+    setWf({ id: meta.id ?? null, name: meta.name || '', description: meta.description || '' });
+    setResult(null);
+  }
   async function load(id) {
     const w = await apiFetch(`/workflows/${id}`);
-    const bySlug = Object.fromEntries(blocks.map((b) => [b.slug, b]));
-    const rfNodes = (w.definition.nodes || []).map((n, i) => ({
-      id: n.id, type: 'block', position: { x: 120 + (i % 3) * 240, y: 80 + Math.floor(i / 3) * 160 },
-      data: { block: bySlug[n.block] || { slug: n.block, name: n.block, icon: '⚙️', inputs: {}, outputs: {}, category: 'agent' }, config: n.config || {} },
-    }));
-    const rfEdges = (w.definition.edges || []).map((e, i) => ({ id: `e${i}`, source: e.from.node, target: e.to.node, targetHandle: e.to.field, animated: true }));
-    setNodes(rfNodes); setEdges(rfEdges); setWf({ id: w.id, name: w.name, description: w.description || '' }); setResult(null);
+    applyDefinition(w.definition || {}, { id: w.id, name: w.name, description: w.description || '' });
+  }
+  const [describe, setDescribe] = useState('');
+  async function generate() {
+    if (!describe.trim()) return;
+    setBusy('gen');
+    try {
+      const out = await apiFetch('/workflows/generate', { method: 'POST', body: JSON.stringify({ description: describe }) });
+      applyDefinition(out.definition, { id: null, name: out.name });
+      setDescribe('');
+    } catch (e) { alert(e.message); } finally { setBusy(''); }
   }
   function newWf() { setNodes([]); setEdges([]); setWf({ id: null, name: '', description: '' }); setResult(null); }
 
@@ -140,6 +155,13 @@ function Inner() {
             <button className="btn btn-primary" style={{ fontSize: 12, flex: 1 }} disabled={busy === 'save'} onClick={save}>{busy === 'save' ? '…' : (wf.id ? 'Update' : 'Save')}</button>
             <button className="btn" style={{ fontSize: 12, flex: 1 }} onClick={openRun}>Test run</button>
             <button className="btn" style={{ fontSize: 12 }} onClick={newWf}>＋</button>
+          </div>
+          <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--accent)', margin: '4px 0 3px' }}>✨ Describe &amp; build</div>
+            <textarea value={describe} onChange={(e) => setDescribe(e.target.value)} rows={3}
+                      placeholder="Describe what you want, e.g. “Verify a claim with Election Watch, then draft a fundraiser brief about it.”"
+                      style={{ width: '100%', padding: 7, border: '1px solid var(--border-color)', borderRadius: 6, fontSize: 12, resize: 'vertical' }} />
+            <button className="btn" style={{ fontSize: 12, width: '100%', marginTop: 4 }} disabled={busy === 'gen'} onClick={generate}>{busy === 'gen' ? 'Drafting…' : 'Build it for me'}</button>
           </div>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '4px 0' }}>Blocks</div>
           {['node', 'tool', 'agent'].map((cat) => {

@@ -14,6 +14,7 @@ import blocks from '../services/blocks/registry.js';
 import '../services/blocks/nodes.js'; // side-effect: registers the Node blocks
 import '../services/blocks/tools.js'; // side-effect: registers the operations-tool blocks
 import { runWorkflow } from '../services/workflows/runner.js';
+import { generateFromDescription } from '../services/workflows/generate.js';
 
 const router = Router();
 const COOKIE = process.env.AUTH_COOKIE || 'tracker_token';
@@ -32,6 +33,16 @@ function ctxFrom(req) {
 // ── Palette ──────────────────────────────────────────────────────────────────
 router.get('/blocks', (req, res) => {
   res.json({ blocks: blocks.list() });
+});
+
+// ── Describe & build: draft a workflow graph from plain English ───────────────
+router.post('/generate', async (req, res) => {
+  try {
+    const out = await generateFromDescription({ description: req.body?.description });
+    res.json(out);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
 });
 
 // ── Workflow CRUD ─────────────────────────────────────────────────────────────
