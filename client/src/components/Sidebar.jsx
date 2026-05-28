@@ -18,9 +18,6 @@ const groundedItems = [
   { to: '/lawsuits', label: 'Lawsuit Tracker', icon: '~', group: 'AI Legal' },
   { to: '/regulation-tracker', label: 'Regulation Tracker', icon: '~', group: 'AI Legal' },
   { to: '/use-cases-admin', label: 'Use Cases', icon: '~', group: 'AI Legal' },
-  // Builder (workflow engine)
-  { to: '/builder', label: 'Builder — compose', icon: '~', group: 'Builder' },
-  { to: '/run', label: 'Run a workflow', icon: '~', group: 'Builder' },
   // Grounded
   { to: '/ingestion', label: 'Ingestion & Scrapers', icon: '~', group: 'Grounded' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },

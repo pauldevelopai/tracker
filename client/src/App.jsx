@@ -140,6 +140,17 @@ export default function App() {
             <Route index element={<Suspense fallback={<LazyFallback />}><PublicTraining /></Suspense>} />
           </Route>
 
+          {/* ── Builder (workflow engine) — user section under the Builder menu.
+                Login required, but rendered in the PUBLIC chrome (not the admin shell). ── */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/builder" element={<PublicLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><BuilderPage /></Suspense>} />
+            </Route>
+            <Route path="/run" element={<PublicLayout />}>
+              <Route index element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
+            </Route>
+          </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
 
@@ -196,8 +207,6 @@ export default function App() {
                 <Route path="/feedback" element={<FeedbackList />} />
                 <Route path="/node-admin" element={<NodesAdmin />} />
                 <Route path="/ingestion" element={<IngestionPage />} />
-                <Route path="/builder" element={<Suspense fallback={<LazyFallback />}><BuilderPage /></Suspense>} />
-                <Route path="/run" element={<Suspense fallback={<LazyFallback />}><RunPage /></Suspense>} />
               </Route>
 
             </Route>

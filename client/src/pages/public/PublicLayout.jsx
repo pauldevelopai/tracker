@@ -24,6 +24,8 @@ const inactiveStyle = navStyle({ isActive: false });
 const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
   { label: 'Tools', to: '/tools/', external: true },
+  { label: 'Workflow builder', to: '/builder', external: false },
+  { label: 'Run a workflow', to: '/run', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },
