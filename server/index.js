@@ -154,7 +154,19 @@ app.use('/tools', createProxyMiddleware({
       proxyRes.on('data', c => chunks.push(c));
       proxyRes.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
-        const rewritten = rewriteAikitHtml(body);
+        let rewritten = rewriteAikitHtml(body);
+        // Inject the shared Grounded chrome (Builder/Tracker nav + feedback & chat
+        // bubbles) so /tools matches every other surface. AIKit ships its own old
+        // Grounded header + chat FAB, so hide those to avoid a double nav/bubble.
+        // Inject AFTER rewriteAikitHtml so the /nodes/chrome.js src isn't prefixed
+        // to /tools/nodes/chrome.js (rewriteAikitHtml prefixes root-absolute src=).
+        const groundedChrome =
+          '<style>body>header[style*="z-index:20"]{display:none!important}' +
+          '#chat-widget,#chat-fab,#chat-panel{display:none!important}</style>' +
+          '<script src="/nodes/chrome.js" defer></script>';
+        rewritten = rewritten.includes('</body>')
+          ? rewritten.replace('</body>', groundedChrome + '</body>')
+          : rewritten + groundedChrome;
         const headers = { ...proxyRes.headers };
         delete headers['content-length'];
         delete headers['content-encoding'];
