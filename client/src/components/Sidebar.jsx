@@ -12,11 +12,15 @@ const dashboardItem = { to: '/admin', label: 'Dashboard', icon: '~' };
 
 // Grounded-only nav — always visible.
 const groundedItems = [
-  { to: '/lawsuits', label: 'AI Lawsuit Tracker', icon: '~', group: 'AI Legal' },
-  { to: '/regulation-tracker', label: 'AI Regulation Tracker', icon: '~', group: 'AI Legal' },
-  { to: '/use-cases-admin', label: 'AI Legal Use Cases', icon: '~', group: 'AI Legal' },
-  { to: '/legal-sources', label: 'Legal Sources & Agents', icon: '~', group: 'AI Legal' },
-  { to: '/node-admin', label: 'Nodes', icon: '~', group: 'AI Legal' },
+  // AI Legal — lead with the ADMIN pipeline: finding, scraping & compiling
+  // sources and building the dataset (not the public-style results list).
+  { to: '/legal-sources', label: 'Sources & Scraping', icon: '~', group: 'AI Legal' },
+  { to: '/lawsuits', label: 'Lawsuit Tracker', icon: '~', group: 'AI Legal' },
+  { to: '/regulation-tracker', label: 'Regulation Tracker', icon: '~', group: 'AI Legal' },
+  { to: '/use-cases-admin', label: 'Use Cases', icon: '~', group: 'AI Legal' },
+  // Grounded
+  { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
+  { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
   { to: '/settings/team', label: 'Team Members', icon: '~', group: 'Grounded' },
 ];
@@ -31,10 +35,8 @@ const developAiItems = [
   { to: '/programmes', label: 'Cohorts', icon: '~', group: 'CRM' },
   { to: '/assessments', label: 'Assessments', icon: '~', group: 'CRM' },
   { to: '/leads', label: 'Leads', icon: '~', group: 'CRM' },
-  { to: '/map', label: 'Map', icon: '~', group: 'CRM' },
   { to: '/training-materials', label: 'Training Materials', icon: '~', group: 'Curriculum' },
   { to: '/course-builder', label: 'Course Builder', icon: '~', group: 'Curriculum' },
-  { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Compliance' },
   { to: '/mentoring', label: 'Mentoring', icon: '~', group: 'Delivery' },
   { to: '/marketing/campaigns', label: 'Campaigns', icon: '~', group: 'Outreach' },
   { to: '/marketing/social', label: 'Social Content', icon: '~', group: 'Outreach' },

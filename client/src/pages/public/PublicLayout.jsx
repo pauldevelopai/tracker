@@ -32,6 +32,12 @@ const TRACKER_ITEMS = [
   { label: 'Use cases', to: '/legal/use-cases' },
   { label: 'Sources', to: '/legal/sources' },
 ];
+const MONETISATION_ITEMS = [
+  { label: 'Extracting value from your archive', to: '/monetisation#archive' },
+  { label: 'Accommodating AI crawlers for cash', to: '/monetisation#crawlers' },
+  { label: 'Answer Engine Optimization', to: '/monetisation#aeo' },
+  { label: 'Collective bargaining', to: '/monetisation#bargaining' },
+];
 
 const dropItemStyle = {
   display: 'block', padding: '8px 12px', fontSize: 14,
@@ -125,6 +131,7 @@ export default function PublicLayout() {
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={BUILDER_ITEMS} />
             <NavDropdown label="Tracker" items={TRACKER_ITEMS} />
+            <NavDropdown label="Monetisation" items={MONETISATION_ITEMS} activeWhen={p => p.startsWith('/monetisation')} />
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +

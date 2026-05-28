@@ -56,7 +56,6 @@ import FeedbackList from './pages/feedback/FeedbackList.jsx';
 import TrainingMaterials from './pages/curriculum/TrainingMaterials.jsx';
 import LeadsPage from './pages/leads/LeadsPage.jsx';
 import MentoringPage from './pages/mentoring/MentoringPage.jsx';
-import OrganisationMap from './pages/map/OrganisationMap.jsx';
 import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
@@ -74,6 +73,7 @@ import PublicRegulationDetail from './pages/public/PublicRegulationDetail.jsx';
 // pulls in react-force-graph-2d + d3-force (~300KB gzipped on its own).
 const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
+const PublicMonetisation = lazy(() => import('./pages/public/PublicMonetisation.jsx'));
 const PublicUseCases = lazy(() => import('./pages/public/PublicUseCases.jsx'));
 const PublicTools    = lazy(() => import('./pages/public/PublicTools.jsx'));
 
@@ -120,6 +120,11 @@ export default function App() {
             <Route path="transparency" element={<Navigate to="/legal/sources" replace />} />
           </Route>
 
+          {/* ── Monetisation — third top-level public section ── */}
+          <Route path="/monetisation" element={<PublicLayout />}>
+            <Route index element={<Suspense fallback={<LazyFallback />}><PublicMonetisation /></Suspense>} />
+          </Route>
+
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
 
@@ -137,7 +142,6 @@ export default function App() {
                 <Route path="/contacts/:id" element={<ContactDetail />} />
                 <Route path="/organisations" element={<OrganisationsList />} />
                 <Route path="/organisations/:id" element={<OrganisationDetail />} />
-                <Route path="/map" element={<OrganisationMap />} />
                 <Route path="/programmes" element={<CohortsList />} />
                 <Route path="/programmes/:id" element={<CohortDetail />} />
                 <Route path="/assessments" element={<AssessmentsList />} />
