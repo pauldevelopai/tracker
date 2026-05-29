@@ -1226,7 +1226,7 @@ router.get('/overview', async (req, res) => {
     const [lawsuits, regulations, useCases, ethics] = await Promise.all([
       list(`SELECT id, case_name, jurisdiction, status, case_type, summary, updated_at
               FROM ai_lawsuits ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
-      list(`SELECT id, title, jurisdiction, status, summary, updated_at
+      list(`SELECT id, COALESCE(short_name, regulation_name) AS title, jurisdiction, status, summary, updated_at
               FROM ai_regulations WHERE status = ANY($1::text[]) ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
       list(`SELECT id, firm_name, jurisdiction, use_case_title, summary, COALESCE(published_at, updated_at) AS updated_at
               FROM ai_legal_usecases WHERE is_published = true ORDER BY COALESCE(published_at, updated_at) DESC NULLS LAST LIMIT 6`),
