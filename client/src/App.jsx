@@ -60,6 +60,7 @@ import LawsuitTracker from './pages/lawsuits/LawsuitTracker.jsx';
 import RegulationTracker from './pages/regulations/RegulationTracker.jsx';
 import LegalSourcesPage from './pages/legal-sources/LegalSourcesPage.jsx';
 import IngestionPage from './pages/ingestion/IngestionPage.jsx';
+import ScraperDashboard from './pages/scraper/ScraperDashboard.jsx';
 import NewsroomProfile from './pages/settings/NewsroomProfile.jsx';
 import ReferenceData from './pages/settings/ReferenceData.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
@@ -218,7 +219,8 @@ export default function App() {
                 <Route path="/agents/coach" element={<ImplementationCoachAgent />} />
                 <Route path="/feedback" element={<FeedbackList />} />
                 <Route path="/node-admin" element={<NodesAdmin />} />
-                <Route path="/ingestion" element={<IngestionPage />} />
+                <Route path="/scraper-dashboard" element={<ScraperDashboard />} />
+              <Route path="/ingestion" element={<IngestionPage />} />
                 <Route path="/settings/newsroom-profile" element={<NewsroomProfile />} />
                 <Route path="/settings/reference-data" element={<ReferenceData />} />
               </Route>

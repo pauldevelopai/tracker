@@ -6,22 +6,13 @@ import NotificationBell from './NotificationBell.jsx';
 
 const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
 
-// Top button → the Grounded command-centre (the stats overview: users, Node
-// usage, feedback, legal counts).
-const dashboardItem = { to: '/admin', label: 'Dashboard', icon: '~' };
-
 // Grounded-only nav — always visible.
 const groundedItems = [
-  // AI Legal — lead with the ADMIN pipeline: finding, scraping & compiling
-  // sources and building the dataset (not the public-style results list).
-  { to: '/legal-sources', label: 'Sources & Scraping', icon: '~', group: 'AI Legal' },
-  { to: '/lawsuits', label: 'Lawsuit Tracker', icon: '~', group: 'AI Legal' },
-  { to: '/regulation-tracker', label: 'Regulation Tracker', icon: '~', group: 'AI Legal' },
-  { to: '/use-cases-admin', label: 'Use Cases', icon: '~', group: 'AI Legal' },
+  // AI Legal — one consolidated monitor. The old per-dataset entries
+  // (Sources & Scraping, Lawsuit/Regulation Tracker, Use Cases, Ingestion)
+  // now live as tiles + "Open →" links inside the Scraper Dashboard.
+  { to: '/scraper-dashboard', label: 'Scraper Dashboard', icon: '~', group: 'AI Legal' },
   // Grounded
-  { to: '/ingestion', label: 'Ingestion & Scrapers', icon: '~', group: 'Grounded' },
-  { to: '/settings/newsroom-profile', label: 'Newsroom Profile', icon: '~', group: 'Grounded' },
-  { to: '/settings/reference-data', label: 'Reference data', icon: '~', group: 'Grounded' },
   { to: '/node-admin', label: 'Nodes', icon: '~', group: 'Grounded' },
   { to: '/documents', label: 'Policies, Frameworks & Security', icon: '~', group: 'Grounded' },
   { to: '/feedback', label: 'Feedback', icon: '~', group: 'Grounded' },
@@ -31,6 +22,7 @@ const groundedItems = [
 // Everything that isn't Grounded — tucked into a collapsible section at the
 // bottom (collapsed by default). Nothing is lost; it's just out of the way.
 const developAiItems = [
+  { to: '/admin', label: 'Dashboard', icon: '~', group: 'Overview' },
   { to: '/dashboard', label: 'Dashboard (stats)', icon: '~', group: 'Overview' },
   { to: '/agents', label: 'Agents', icon: '~', group: 'Overview' },
   { to: '/contacts', label: 'Contacts', icon: '~', group: 'CRM' },
@@ -49,6 +41,8 @@ const developAiItems = [
   { to: '/intelligence', label: 'Intelligence', icon: '~', group: 'AI' },
   { to: '/knowledge', label: 'Knowledge', icon: '~', group: 'AI' },
   { to: '/database', label: 'Database', icon: '~', group: 'Data' },
+  { to: '/settings/newsroom-profile', label: 'Newsroom Profile', icon: '~', group: 'Settings' },
+  { to: '/settings/reference-data', label: 'Reference data', icon: '~', group: 'Settings' },
   { to: '/settings/sectors', label: 'Sectors', icon: '~', group: 'Settings' },
   { to: '/settings/gmail', label: 'Gmail', icon: '~', group: 'Settings' },
 ];
@@ -177,10 +171,6 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        {/* Dashboard — separate top button → the Grounded stats command-centre. */}
-        <NavItem item={dashboardItem} />
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
-
         {/* Grounded — always visible. */}
         {renderNav(groundedItems)}
 
