@@ -4,6 +4,7 @@
 // Save / Test run. Workflow inputs are auto-derived: any REQUIRED input field
 // with no incoming edge is prompted for at run time. The sink block is the output.
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ReactFlow, ReactFlowProvider, Background, Controls, MiniMap,
   addEdge, applyNodeChanges, applyEdgeChanges, Handle, Position,
@@ -145,7 +146,9 @@ function Inner() {
 
   return (
     <div>
-      <PageHeader title="Builder" subtitle="Compose a workflow from Nodes, tools and (soon) agents — drag blocks in, wire them up, save, and test." />
+      <PageHeader title="Builder" subtitle="Compose a workflow from Nodes, tools and (soon) agents — drag blocks in, wire them up, save, and test.">
+        <Link to="/run" className="btn" style={{ fontSize: 13 }}>Run a saved workflow&nbsp;&rarr;</Link>
+      </PageHeader>
       <div style={{ display: 'flex', gap: 12, height: 'calc(100vh - 200px)', minHeight: 520 }}>
         {/* Palette */}
         <div style={{ width: 230, overflowY: 'auto', borderRight: '1px solid var(--border-color)', paddingRight: 10 }}>

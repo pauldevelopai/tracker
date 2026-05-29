@@ -19,22 +19,23 @@ const navStyle = ({ isActive }) => ({
 
 const inactiveStyle = navStyle({ isActive: false });
 
-// The two top-level groups. Builder = the tools you run/own (external apps);
-// Tracker = the AI Legal dataset (internal routes).
+// The top-level groups. Builder = the tools you run/own (Nodes + tool search +
+// the workflow composer). AI Policies = the AI Legal dataset (internal routes).
+// Training = the learning hub, with Sources tucked underneath it.
 const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
-  { label: 'Tools', to: '/tools/', external: true },
+  { label: 'Tool Search', to: '/tools/', external: true },
   { label: 'Workflow builder', to: '/builder', external: false },
-  { label: 'Run a workflow', to: '/run', external: false },
-  { label: 'Tools & Agents', to: '/tools-hub', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },
   { label: 'Regulations', to: '/legal/regulations' },
   { label: 'Connections', to: '/legal/explore' },
   { label: 'Use cases', to: '/legal/use-cases' },
+  { label: 'Ethics', to: '/legal/ethics' },
 ];
-const DATA_ITEMS = [
+const TRAINING_ITEMS = [
+  { label: 'Training', to: '/training' },
   { label: 'Sources', to: '/legal/sources' },
 ];
 
@@ -129,10 +130,9 @@ export default function PublicLayout() {
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
             <NavDropdown label="Builder" items={BUILDER_ITEMS} />
-            <NavDropdown label="Tracker" items={TRACKER_ITEMS} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
+            <NavDropdown label="AI Policies" items={TRACKER_ITEMS} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
             <NavLink to="/monetisation" style={navStyle}>Monetisation</NavLink>
-            <NavDropdown label="Data" items={DATA_ITEMS} activeWhen={p => p.startsWith('/legal/sources')} />
-            <NavLink to="/training" style={navStyle}>Training</NavLink>
+            <NavDropdown label="Training" items={TRAINING_ITEMS} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +
