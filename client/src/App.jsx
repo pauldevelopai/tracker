@@ -78,6 +78,8 @@ import PublicRegulationDetail from './pages/public/PublicRegulationDetail.jsx';
 const PublicExplore  = lazy(() => import('./pages/public/PublicExplore.jsx'));
 const PublicSources  = lazy(() => import('./pages/public/PublicSources.jsx'));
 const PublicMonetisation = lazy(() => import('./pages/public/PublicMonetisation.jsx'));
+const PublicLegalDashboard = lazy(() => import('./pages/public/PublicLegalDashboard.jsx'));
+const EthicsPolicyBuilder = lazy(() => import('./pages/public/EthicsPolicyBuilder.jsx'));
 const PublicToolsDirectory = lazy(() => import('./pages/public/PublicToolsDirectory.jsx'));
 const PublicTraining = lazy(() => import('./pages/public/PublicTraining.jsx'));
 const BuilderPage = lazy(() => import('./pages/builder/BuilderPage.jsx'));
@@ -115,6 +117,8 @@ export default function App() {
           {/* ── Public AI Legal site (sub-pages) — no auth required ── */}
           <Route path="/legal" element={<PublicLayout />}>
             <Route index element={<PublicHome />} />
+            <Route path="dashboard"      element={<Suspense fallback={<LazyFallback />}><PublicLegalDashboard /></Suspense>} />
+            <Route path="ethics-builder" element={<Suspense fallback={<LazyFallback />}><EthicsPolicyBuilder /></Suspense>} />
             <Route path="lawsuits" element={<PublicLawsuitsList />} />
             <Route path="lawsuits/:id" element={<PublicLawsuitDetail />} />
             <Route path="regulations" element={<PublicRegulationsList />} />

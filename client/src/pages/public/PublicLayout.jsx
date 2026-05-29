@@ -29,11 +29,13 @@ const BUILDER_ITEMS = [
   { label: 'Monetisation', to: '/monetisation', external: false },
 ];
 const TRACKER_ITEMS = [
+  { label: 'Dashboard', to: '/legal/dashboard' },
   { label: 'Lawsuits', to: '/legal/lawsuits' },
   { label: 'Regulations', to: '/legal/regulations' },
   { label: 'Connections', to: '/legal/explore' },
   { label: 'Use cases', to: '/legal/use-cases' },
   { label: 'Ethics', to: '/legal/ethics' },
+  { label: 'Ethics Policy Builder', to: '/legal/ethics-builder' },
   { label: 'Security Audit', to: '/tool/tool-security-audit' },
 ];
 const TRAINING_ITEMS = [

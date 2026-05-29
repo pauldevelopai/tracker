@@ -2,7 +2,7 @@
 // Mount BEFORE any auth middleware.
 import { Router } from 'express';
 import pool from '../db/pool.js';
-import { chatAboutAiLegal } from '../services/claude.js';
+import { chatAboutAiLegal, callClaude } from '../services/claude.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
 import '../services/blocks/agents.js';  // side-effect: register the agent blocks
@@ -1188,6 +1188,113 @@ router.get('/oss-tools', async (req, res) => {
     res.json({ items: rows });
   } catch (err) {
     res.json({ items: [] });
+  }
+});
+
+// Published AI-ethics resources (compiled by the ethics scraper + AI pipeline),
+// surfaced under the six principles on the public Ethics page (/legal/ethics).
+router.get('/ethics', async (req, res) => {
+  try {
+    const { topic } = req.query;
+    const params = [];
+    let where = `WHERE status = 'published'`;
+    if (topic) { params.push(topic); where += ` AND topic = $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT id, topic, item_type, title, summary, url, source_name, published_at
+         FROM ethics_items ${where}
+         ORDER BY COALESCE(published_at, created_at) DESC LIMIT 200`,
+      params
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    res.json({ items: [] }); // table may not exist yet — degrade gracefully
+  }
+});
+
+// AI Policies dashboard — counts + a few recent items for every section, in one
+// call, so the public dashboard renders without four round-trips.
+router.get('/overview', async (req, res) => {
+  const n = async (sql, p = []) => { try { const { rows } = await pool.query(sql, p); return Number(rows[0]?.n || 0); } catch { return 0; } };
+  const list = async (sql, p = []) => { try { const { rows } = await pool.query(sql, p); return rows; } catch { return []; } };
+  try {
+    const [lawsuitsCount, regsCount, useCasesCount, ethicsCount] = await Promise.all([
+      n(`SELECT count(*)::int n FROM ai_lawsuits`),
+      n(`SELECT count(*)::int n FROM ai_regulations WHERE status = ANY($1::text[])`, [PUBLIC_REG_STATUSES]),
+      n(`SELECT count(*)::int n FROM ai_legal_usecases WHERE is_published = true`),
+      n(`SELECT count(*)::int n FROM ethics_items WHERE status = 'published'`),
+    ]);
+    const [lawsuits, regulations, useCases, ethics] = await Promise.all([
+      list(`SELECT id, case_name, jurisdiction, status, case_type, summary, updated_at
+              FROM ai_lawsuits ORDER BY updated_at DESC NULLS LAST LIMIT 6`),
+      list(`SELECT id, title, jurisdiction, status, summary, updated_at
+              FROM ai_regulations WHERE status = ANY($1::text[]) ORDER BY updated_at DESC NULLS LAST LIMIT 6`, [PUBLIC_REG_STATUSES]),
+      list(`SELECT id, firm_name, jurisdiction, use_case_title, summary, COALESCE(published_at, updated_at) AS updated_at
+              FROM ai_legal_usecases WHERE is_published = true ORDER BY COALESCE(published_at, updated_at) DESC NULLS LAST LIMIT 6`),
+      list(`SELECT id, topic, item_type, title, summary, url, source_name, COALESCE(published_at, created_at) AS updated_at
+              FROM ethics_items WHERE status = 'published' ORDER BY COALESCE(published_at, created_at) DESC NULLS LAST LIMIT 6`),
+    ]);
+    res.json({
+      lawsuits:    { count: lawsuitsCount, recent: lawsuits },
+      regulations: { count: regsCount,     recent: regulations },
+      useCases:    { count: useCasesCount, recent: useCases },
+      ethics:      { count: ethicsCount,   recent: ethics },
+    });
+  } catch (err) {
+    console.error('[public/overview]', err);
+    res.status(500).json({ message: 'overview failed' });
+  }
+});
+
+// Ethics policy builder — generate a newsroom AI-ethics policy from a short
+// brief, OR review an existing policy (pasted/uploaded text) and suggest
+// improvements. Rate-limited like /chat (it calls Claude). Returns structured
+// JSON the client renders.
+router.post('/ethics-policy', async (req, res) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || req.ip || 'unknown').toString().split(',')[0].trim();
+    const limit = checkChatRateLimit(ip);
+    if (!limit.ok) {
+      res.setHeader('Retry-After', String(limit.retryAfter));
+      return res.status(429).json({ message: `Too many requests. Try again in ${Math.ceil(limit.retryAfter / 60)} minutes.` });
+    }
+
+    const { mode = 'create', newsroomName = '', jurisdiction = '', aiUses = '', existingPolicy = '' } = req.body || {};
+    const isReview = mode === 'review';
+    if (isReview && (!existingPolicy || existingPolicy.trim().length < 40)) {
+      return res.status(400).json({ message: 'Paste your existing policy (at least a few sentences) to get suggestions.' });
+    }
+    if (existingPolicy && existingPolicy.length > 20000) {
+      return res.status(400).json({ message: 'Policy text is too long (max ~20,000 characters).' });
+    }
+
+    const system = `You are an editorial-standards adviser helping a newsroom with its AI-ethics policy.
+Ground everything in practical newsroom reality and these six principles: transparency with the
+audience, accuracy & verification, protecting sources & sensitive data, bias & fairness, jobs &
+skills, and accountability & corrections. Be concrete and specific to a newsroom — not generic
+corporate boilerplate. Keep a clear, plain, editor-friendly voice.
+
+Return ONLY JSON of this shape:
+{
+  "title": "string",
+  "summary": "1-2 sentence overview",
+  "policy_markdown": "the full policy as markdown, with sections per principle and concrete rules",
+  "suggestions": [{"area":"transparency|accuracy|sources|bias|labour|accountability|other","point":"what to add/fix","why":"why it matters"}],
+  ${isReview ? `"gaps": ["principle or topic the existing policy is missing or weak on"],` : ''}
+  "checklist": ["short adoptable action items"]
+}`;
+
+    const brief = isReview
+      ? `MODE: review an existing policy and suggest improvements.\nNewsroom: ${newsroomName || '(unspecified)'}\nJurisdiction: ${jurisdiction || '(unspecified)'}\n\nEXISTING POLICY:\n${existingPolicy}`
+      : `MODE: draft a new AI-ethics policy from this brief.\nNewsroom: ${newsroomName || 'a newsroom'}\nJurisdiction: ${jurisdiction || '(unspecified — keep it broadly applicable)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover the common newsroom uses)'}`;
+
+    const raw = await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 });
+    let out;
+    const s = String(raw); const a = s.indexOf('{'); const b = s.lastIndexOf('}');
+    try { out = JSON.parse(s.slice(a, b + 1)); } catch { out = { title: 'AI Ethics Policy', policy_markdown: s, suggestions: [], checklist: [] }; }
+    res.json({ mode, output: out });
+  } catch (err) {
+    console.error('[public/ethics-policy]', err);
+    res.status(500).json({ message: err.message || 'Could not generate the policy. Please try again.' });
   }
 });
 

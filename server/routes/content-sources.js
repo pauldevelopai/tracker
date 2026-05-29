@@ -7,9 +7,10 @@ import { dispatchDueContentSources, dispatchContentSource } from '../services/co
 import { triageMonetisationPending } from '../services/content-ingest/triage-monetisation.js';
 import { triageToolsPending } from '../services/content-ingest/triage-tools.js';
 import { triageDataSecurityPending } from '../services/content-ingest/triage-data-security.js';
+import { triageEthicsPending } from '../services/content-ingest/triage-ethics.js';
 
 const router = Router();
-const TRIAGERS = { monetisation: triageMonetisationPending, tools: triageToolsPending, 'data-security': triageDataSecurityPending };
+const TRIAGERS = { monetisation: triageMonetisationPending, tools: triageToolsPending, 'data-security': triageDataSecurityPending, ethics: triageEthicsPending };
 
 // Friendlier display labels for domains whose slug doesn't title-case cleanly.
 const DOMAIN_LABELS = { 'data-security': 'Data Security' };
@@ -31,6 +32,12 @@ const COMPILED = {
   'data-security': {
     table: 'data_security_items',
     ragCategory: 'data-security',
+    ragSub: (it) => it.topic,
+    ragContent: (it) => (it.summary || it.title) + (it.url ? `\n\nSource: ${it.url}` : ''),
+  },
+  ethics: {
+    table: 'ethics_items',
+    ragCategory: 'ai-ethics',
     ragSub: (it) => it.topic,
     ragContent: (it) => (it.summary || it.title) + (it.url ? `\n\nSource: ${it.url}` : ''),
   },
