@@ -34,6 +34,7 @@ const TRACKER_ITEMS = [
   { label: 'Connections', to: '/legal/explore' },
   { label: 'Use cases', to: '/legal/use-cases' },
   { label: 'Ethics', to: '/legal/ethics' },
+  { label: 'Security Audit', to: '/tool/tool-security-audit' },
 ];
 const TRAINING_ITEMS = [
   { label: 'Training', to: '/training' },

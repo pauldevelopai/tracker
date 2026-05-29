@@ -6,9 +6,13 @@ import pool from '../db/pool.js';
 import { dispatchDueContentSources, dispatchContentSource } from '../services/content-ingest/dispatcher.js';
 import { triageMonetisationPending } from '../services/content-ingest/triage-monetisation.js';
 import { triageToolsPending } from '../services/content-ingest/triage-tools.js';
+import { triageDataSecurityPending } from '../services/content-ingest/triage-data-security.js';
 
 const router = Router();
-const TRIAGERS = { monetisation: triageMonetisationPending, tools: triageToolsPending };
+const TRIAGERS = { monetisation: triageMonetisationPending, tools: triageToolsPending, 'data-security': triageDataSecurityPending };
+
+// Friendlier display labels for domains whose slug doesn't title-case cleanly.
+const DOMAIN_LABELS = { 'data-security': 'Data Security' };
 
 // Per-domain compiled-table config (table names are a fixed allowlist — never user input).
 const COMPILED = {
@@ -23,6 +27,12 @@ const COMPILED = {
     ragCategory: 'open-source-tools',
     ragSub: (it) => it.category,
     ragContent: (it) => [it.description, it.newsroom_use && `Newsroom use: ${it.newsroom_use}`, it.url && `Repo: ${it.url}`].filter(Boolean).join('\n\n'),
+  },
+  'data-security': {
+    table: 'data_security_items',
+    ragCategory: 'data-security',
+    ragSub: (it) => it.topic,
+    ragContent: (it) => (it.summary || it.title) + (it.url ? `\n\nSource: ${it.url}` : ''),
   },
 };
 
@@ -50,7 +60,7 @@ router.get('/overview', async (req, res) => {
     const { rows: doms } = await pool.query(`SELECT DISTINCT domain FROM content_sources ORDER BY domain`);
     for (const { domain } of doms) {
       const row = {
-        domain, label: domain.charAt(0).toUpperCase() + domain.slice(1), managed: true,
+        domain, label: DOMAIN_LABELS[domain] || (domain.charAt(0).toUpperCase() + domain.slice(1)), managed: true,
         sources: {
           active: await count(`SELECT count(*)::int n FROM content_sources WHERE domain=$1 AND active`, [domain]),
           total: await count(`SELECT count(*)::int n FROM content_sources WHERE domain=$1`, [domain]),
