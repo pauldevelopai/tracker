@@ -66,6 +66,10 @@ import ReferenceData from './pages/settings/ReferenceData.jsx';
 import UseCasesAdmin from './pages/usecases/UseCasesAdmin.jsx';
 import NodesAdmin from './pages/nodes/NodesAdmin.jsx';
 import AdminOverview from './pages/admin/AdminOverview.jsx';
+import PulseGate from './pages/pulse/PulseGate.jsx';
+import PulseOverview from './pages/pulse/PulseOverview.jsx';
+import PulseCycleDetail from './pages/pulse/PulseCycleDetail.jsx';
+import PulseNewsroomDetail from './pages/pulse/PulseNewsroomDetail.jsx';
 import { lazy, Suspense } from 'react';
 import PublicLayout from './pages/public/PublicLayout.jsx';
 import PublicHome from './pages/public/PublicHome.jsx';
@@ -180,6 +184,10 @@ export default function App() {
               {/* ── Admin-only routes — non-admins are redirected to /lawsuits ── */}
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<AdminOverview />} />
+                {/* ── Pulse (feature-flagged; PulseGate renders "Not found" when off) ── */}
+                <Route path="/admin/pulse" element={<PulseGate><PulseOverview /></PulseGate>} />
+                <Route path="/admin/pulse/cycles/:id" element={<PulseGate><PulseCycleDetail /></PulseGate>} />
+                <Route path="/admin/pulse/newsrooms/:id" element={<PulseGate><PulseNewsroomDetail /></PulseGate>} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/contacts" element={<ContactsList />} />
                 <Route path="/contacts/:id" element={<ContactDetail />} />

@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSectors } from '../context/SectorContext.jsx';
+import { usePulseEnabled } from '../hooks/usePulseEnabled.js';
 import NotificationBell from './NotificationBell.jsx';
 
-const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin']);
+const AI_FEATURES = new Set(['/assessments', '/curriculum', '/documents', '/marketing/campaigns', '/marketing/social', '/fundraising', '/agents/curriculum', '/agents/leads', '/agents/coach', '/lawsuits', '/regulation-tracker', '/legal-sources', '/use-cases-admin', '/admin/pulse']);
 
 // Grounded-only nav — always visible.
 const groundedItems = [
@@ -80,6 +81,18 @@ export default function Sidebar() {
 
   const isAdmin = user?.role === 'admin';
   const [devOpen, setDevOpen] = useState(false);
+  const pulseEnabled = usePulseEnabled();
+
+  // Add the single Pulse nav item (under GROUNDED, after Nodes) only when the
+  // feature flag is on — keeps the surface invisible otherwise.
+  const groundedNav = (() => {
+    if (!pulseEnabled) return groundedItems;
+    const item = { to: '/admin/pulse', label: 'Pulse', icon: '~', group: 'Grounded' };
+    const idx = groundedItems.findIndex((i) => i.to === '/node-admin');
+    const copy = [...groundedItems];
+    copy.splice(idx + 1, 0, item);
+    return copy;
+  })();
 
   // Render a list of nav items, inserting a header each time the group changes.
   const renderNav = (items) => {
@@ -172,7 +185,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav style={{ flex: 1, padding: '8px 0', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         {/* Grounded — always visible. */}
-        {renderNav(groundedItems)}
+        {renderNav(groundedNav)}
 
         {/* Everything else, collapsed into a "Develop AI" section at the bottom. */}
         <div style={{ marginTop: 'auto', paddingTop: 8 }}>

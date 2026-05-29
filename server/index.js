@@ -49,6 +49,9 @@ import publicRoutes from './routes/public.js';
 import publicHtmlRoutes from './routes/public-html.js';
 import nodesRoutes from './routes/nodes.js';
 import adminOverviewRoutes from './routes/admin.js';
+import pulseRoutes from './routes/pulse.js';
+import pulsePublicRoutes from './routes/pulse-public.js';
+import { requirePulse } from './middleware/pulse-flag.js';
 import { startScheduler } from './services/scheduler.js';
 import { requireAuth, requireRole } from './middleware/auth.js';
 import { sectorFilter } from './middleware/sector-filter.js';
@@ -300,6 +303,17 @@ app.use('/api/usecases', requireAuth, usecasesRoutes);
 app.use('/api/ai-assistant', requireAuth, aiAssistantRoutes);
 // Feedback: all authenticated users can submit; admin can view/manage
 app.use('/api/feedback', requireAuth, feedbackRoutes);
+
+// ── Pulse (feature-flagged) ────────────────────────────────────────────────────
+// requirePulse 404s the whole surface when PULSE_ENABLED!=true. Mounted before
+// the generic /api admin router so these prefixes are handled here. The public
+// answer surface is unauthenticated (only the flag + an unguessable token); the
+// admin surface adds requireAuth + requireRole('admin').
+// Ungated status probe so the client can hide/show the Pulse nav + routes
+// without a 401/404 round-trip. Returns the flag only — nothing sensitive.
+app.get('/api/pulse/status', (req, res) => res.json({ enabled: config.pulseEnabled }));
+app.use('/api/pulse/public', requirePulse, pulsePublicRoutes);
+app.use('/api/pulse', requirePulse, requireAuth, requireRole('admin'), pulseRoutes);
 
 // ── Admin-only endpoints ───────────────────────────────────────────────────────
 // All routes below this point require role = 'admin'.

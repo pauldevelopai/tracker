@@ -16,4 +16,18 @@ export default {
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/api/gmail/callback',
+
+  // ── Pulse (feature-flagged feedback-loop system; additive, off by default) ──
+  // When pulseEnabled is false, every /api/pulse/* route 404s and no Pulse code
+  // path executes. See server/pulse/ and CLAUDE.md (Pulse section).
+  pulseEnabled: String(process.env.PULSE_ENABLED || 'false').toLowerCase() === 'true',
+  airtableApiKey: process.env.AIRTABLE_API_KEY || '',
+  airtableBaseId: process.env.AIRTABLE_BASE_ID || 'app4FVlF4AAy8Q8s2',
+  githubToken: process.env.GITHUB_TOKEN || '',
+  // Org that hosts the node repos (repo name resolved by convention: node-<slug>).
+  githubOrg: process.env.PULSE_GITHUB_ORG || 'pauldevelopai',
+  // Optional slug→repo overrides as JSON, e.g. {"verifier":"node-capitalfm-verifier"}.
+  pulseNodeRepos: process.env.PULSE_NODE_REPOS || '',
+  // Base URL used to build the public per-cycle answer link.
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || 'https://grounded.developai.co.za',
 };
