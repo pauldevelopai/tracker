@@ -3,6 +3,7 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { chatAboutAiLegal, callClaude } from '../services/claude.js';
+import { PUBLIC_NAV } from '../config/publicNav.js';
 import blocks from '../services/blocks/registry.js';
 import '../services/blocks/tools.js';   // side-effect: register the tool blocks
 import '../services/blocks/agents.js';  // side-effect: register the agent blocks
@@ -1189,6 +1190,13 @@ router.get('/oss-tools', async (req, res) => {
   } catch (err) {
     res.json({ items: [] });
   }
+});
+
+// Canonical top-nav menu — single source of truth for both the SPA and the
+// Nodes front door (chrome.js). See server/config/publicNav.js.
+router.get('/nav', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json(PUBLIC_NAV);
 });
 
 // Published AI-ethics resources (compiled by the ethics scraper + AI pipeline),

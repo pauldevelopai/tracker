@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, useRef } from 'react';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { publicFetch } from '../../hooks/usePublicApi.js';
 import FeedbackBubble from '../../components/FeedbackBubble.jsx';
 
 // Lazy so the chatbot bundle doesn't block first paint — it's only used
@@ -22,6 +23,11 @@ const inactiveStyle = navStyle({ isActive: false });
 // The top-level groups. Builder = the tools you run/own (Nodes + tool search +
 // the workflow composer). AI Policies = the AI Legal dataset (internal routes).
 // Training = the learning hub, with Sources tucked underneath it.
+//
+// These arrays are the OFFLINE FALLBACK. The live menu is fetched from
+// /api/public/nav (server/config/publicNav.js) — the single source of truth
+// shared with the Nodes front door — so the two surfaces can't drift. Keep
+// these in sync-ish, but the server wins at runtime.
 const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
   { label: 'Tool Search', to: '/tools/', external: true },
@@ -106,6 +112,16 @@ export default function PublicLayout() {
     return () => { document.title = prev; };
   }, []);
 
+  // Live menu from the single source of truth (/api/public/nav); the imported
+  // constants are the offline fallback shown until/if the fetch resolves.
+  const [menu, setMenu] = useState({ builder: BUILDER_ITEMS, tracker: TRACKER_ITEMS, training: TRAINING_ITEMS });
+  useEffect(() => {
+    const map = (arr) => (arr || []).map(i => ({ label: i.label, to: i.href, external: !!i.external }));
+    publicFetch('/public/nav')
+      .then(d => { if (d?.builder) setMenu({ builder: map(d.builder), tracker: map(d.tracker), training: map(d.training) }); })
+      .catch(() => {});
+  }, []);
+
   // Where to bring the user back to after a successful sign-in.
   const nextParam = encodeURIComponent(location.pathname + location.search);
   const firstName = user?.name?.split(' ')[0] || user?.email || 'admin';
@@ -133,9 +149,9 @@ export default function PublicLayout() {
           </Link>
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
-            <NavDropdown label="Builder" items={BUILDER_ITEMS} activeWhen={p => p.startsWith('/monetisation')} />
-            <NavDropdown label="AI Policies" items={TRACKER_ITEMS} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
-            <NavDropdown label="Training" items={TRAINING_ITEMS} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
+            <NavDropdown label="Builder" items={menu.builder} activeWhen={p => p.startsWith('/monetisation')} />
+            <NavDropdown label="AI Policies" items={menu.tracker} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
+            <NavDropdown label="Training" items={menu.training} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
             {user ? (
               <>
                 {/* Logged-in users get a way into the app shell (sidebar +
