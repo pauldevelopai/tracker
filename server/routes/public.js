@@ -1273,24 +1273,44 @@ audience, accuracy & verification, protecting sources & sensitive data, bias & f
 skills, and accountability & corrections. Be concrete and specific to a newsroom — not generic
 corporate boilerplate. Keep a clear, plain, editor-friendly voice.
 
-Return ONLY JSON of this shape:
-{
-  "title": "string",
-  "summary": "1-2 sentence overview",
-  "policy_markdown": "the full policy as markdown, with sections per principle and concrete rules",
-  "suggestions": [{"area":"transparency|accuracy|sources|bias|labour|accountability|other","point":"what to add/fix","why":"why it matters"}],
+Respond in TWO parts, in this exact order:
+
+PART 1 — a single-line JSON object (NO code fence, NO newlines inside it) with keys:
+  "title": string,
+  "summary": 1-2 sentence overview,
+  "suggestions": [{"area":"transparency|accuracy|sources|bias|labour|accountability|other","point":"...","why":"..."}],
   ${isReview ? `"gaps": ["principle or topic the existing policy is missing or weak on"],` : ''}
   "checklist": ["short adoptable action items"]
-}`;
+
+PART 2 — a line containing exactly:
+---POLICY---
+…then the full policy as markdown (sections per principle, concrete rules). Put NO JSON here.`;
 
     const brief = isReview
       ? `MODE: review an existing policy and suggest improvements.\nNewsroom: ${newsroomName || '(unspecified)'}\nJurisdiction: ${jurisdiction || '(unspecified)'}\n\nEXISTING POLICY:\n${existingPolicy}`
       : `MODE: draft a new AI-ethics policy from this brief.\nNewsroom: ${newsroomName || 'a newsroom'}\nJurisdiction: ${jurisdiction || '(unspecified — keep it broadly applicable)'}\nHow they use (or plan to use) AI: ${aiUses || '(unspecified — cover the common newsroom uses)'}`;
 
-    const raw = await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 });
-    let out;
-    const s = String(raw); const a = s.indexOf('{'); const b = s.lastIndexOf('}');
-    try { out = JSON.parse(s.slice(a, b + 1)); } catch { out = { title: 'AI Ethics Policy', policy_markdown: s, suggestions: [], checklist: [] }; }
+    const raw = String(await callClaude({ system, userContent: brief, maxTokens: 3000, temperature: 0.3 }));
+
+    // Split the short JSON metadata from the (newline-heavy) policy body on the
+    // sentinel, so raw newlines in the policy can never break JSON parsing.
+    const [metaPart, ...rest] = raw.split('---POLICY---');
+    const policyMarkdown = rest.join('---POLICY---').trim();
+    let meta = {};
+    const jsonStr = metaPart.replace(/```json|```/g, '');
+    const a = jsonStr.indexOf('{'), b = jsonStr.lastIndexOf('}');
+    if (a >= 0 && b > a) { try { meta = JSON.parse(jsonStr.slice(a, b + 1)); } catch { /* keep defaults */ } }
+
+    const out = {
+      title: meta.title || 'AI Ethics Policy',
+      summary: meta.summary || '',
+      suggestions: Array.isArray(meta.suggestions) ? meta.suggestions : [],
+      gaps: Array.isArray(meta.gaps) ? meta.gaps : undefined,
+      checklist: Array.isArray(meta.checklist) ? meta.checklist : [],
+      // Fall back to the whole response (minus any stray sentinel) if the model
+      // didn't emit the marker.
+      policy_markdown: policyMarkdown || raw.replace('---POLICY---', '').trim(),
+    };
     res.json({ mode, output: out });
   } catch (err) {
     console.error('[public/ethics-policy]', err);
