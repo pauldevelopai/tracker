@@ -26,6 +26,7 @@ const BUILDER_ITEMS = [
   { label: 'Nodes', to: '/nodes/', external: true },
   { label: 'Tool Search', to: '/tools/', external: true },
   { label: 'Workflow builder', to: '/builder', external: false },
+  { label: 'Monetisation', to: '/monetisation', external: false },
 ];
 const TRACKER_ITEMS = [
   { label: 'Lawsuits', to: '/legal/lawsuits' },
@@ -129,9 +130,8 @@ export default function PublicLayout() {
           </Link>
           <nav style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
             <NavLink to="/" end style={navStyle}>Home</NavLink>
-            <NavDropdown label="Builder" items={BUILDER_ITEMS} />
+            <NavDropdown label="Builder" items={BUILDER_ITEMS} activeWhen={p => p.startsWith('/monetisation')} />
             <NavDropdown label="AI Policies" items={TRACKER_ITEMS} activeWhen={p => p.startsWith('/legal/') && !p.startsWith('/legal/sources')} />
-            <NavLink to="/monetisation" style={navStyle}>Monetisation</NavLink>
             <NavDropdown label="Training" items={TRAINING_ITEMS} activeWhen={p => p.startsWith('/training') || p.startsWith('/legal/sources')} />
             {user ? (
               <>

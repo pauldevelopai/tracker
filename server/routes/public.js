@@ -3,6 +3,9 @@
 import { Router } from 'express';
 import pool from '../db/pool.js';
 import { chatAboutAiLegal } from '../services/claude.js';
+import blocks from '../services/blocks/registry.js';
+import '../services/blocks/tools.js';   // side-effect: register the tool blocks
+import '../services/blocks/agents.js';  // side-effect: register the agent blocks
 
 // Turn a natural-language question into a Postgres-FTS-friendly query by
 // dropping question words / fillers that add no search signal.
@@ -1137,6 +1140,17 @@ router.get('/toolkit/:slug', async (req, res) => {
     console.error('[public/toolkit/:slug]', err);
     res.status(500).json({ message: 'Internal server error' });
   }
+});
+
+// Public catalogue of the workflow *blocks* — the operations tools + journalism
+// agents (the old "Tools & Agents" page), now folded into the Nodes front door.
+// Metadata only (registry.list strips run()); *running* one still needs sign-in
+// via /api/tool-kit, but the listing is public so visitors can see what exists.
+router.get('/workflow-tools', (req, res) => {
+  res.json({
+    tools: blocks.listByCategory('tool'),
+    agents: blocks.listByCategory('agent'),
+  });
 });
 
 // Published Monetisation resources (compiled by the content pipeline, admin-published).
