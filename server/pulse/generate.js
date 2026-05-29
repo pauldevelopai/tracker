@@ -11,12 +11,13 @@ const MODEL = process.env.PULSE_MODEL || 'claude-opus-4-8';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
-async function complete(systemPrompt, { maxTokens = 4000, temperature = 0.7 } = {}) {
+async function complete(systemPrompt, { maxTokens = 4000 } = {}) {
   if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  // NB: claude-opus-4-8 rejects `temperature` ("deprecated for this model"),
+  // so we don't send it — the model picks its own.
   const msg = await client.messages.create({
     model: MODEL,
     max_tokens: maxTokens,
-    temperature,
     // The whole rendered prompt is the system message; cache it so re-runs of
     // the same cycle (e.g. retries) are cheap.
     system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
@@ -37,21 +38,21 @@ function parseJson(text) {
 }
 
 export async function generateQuestions(vars) {
-  const out = await complete(render(loadPrompt('generate'), vars), { maxTokens: 3000, temperature: 0.8 });
+  const out = await complete(render(loadPrompt('generate'), vars), { maxTokens: 3000 });
   return parseJson(out); // { questions: [...], tip: "..." }
 }
 
 export async function draftPlan(vars) {
-  const out = await complete(render(loadPrompt('plan'), vars), { maxTokens: 3000, temperature: 0.5 });
+  const out = await complete(render(loadPrompt('plan'), vars), { maxTokens: 3000 });
   return parseJson(out); // { noChange, summary, rationale, scope, riskFlags, rejectionReason }
 }
 
 export async function generateBriefing(vars) {
   // Plain text, not JSON.
-  return complete(render(loadPrompt('claudecode-briefing'), vars), { maxTokens: 4000, temperature: 0.4 });
+  return complete(render(loadPrompt('claudecode-briefing'), vars), { maxTokens: 4000 });
 }
 
 export async function generateReport(vars) {
-  const out = await complete(render(loadPrompt('report'), vars), { maxTokens: 1500, temperature: 0.7 });
+  const out = await complete(render(loadPrompt('report'), vars), { maxTokens: 1500 });
   return parseJson(out); // { subject, whatsapp, email }
 }
